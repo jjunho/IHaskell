@@ -16,8 +16,7 @@ import           Data.Aeson hiding (Success)
 import           System.Process (readProcess, readProcessWithExitCode)
 import           System.Exit (exitSuccess, ExitCode)
 import           Control.Exception (try)
-import           System.Environment (getArgs)
-import           System.Environment (setEnv)
+import           System.Environment (getArgs, setEnv)
 import           System.Posix.Signals
 import qualified Data.Map as Map
 import           Data.List (break, last)
