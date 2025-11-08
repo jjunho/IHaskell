@@ -6,8 +6,7 @@ import           Test.Hspec
 import           Text.RawString.QQ
 
 import           IHaskell.Eval.Hoogle
--- import           Data.Text (unpack)
--- import qualified Data.Text.IO as T
+
 preludeFmapJson :: String
 preludeFmapJson = [r|
 [

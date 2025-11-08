@@ -15,7 +15,6 @@ on:
     - 'flake.nix'
     - 'flake.lock'
     - 'README.md'
-    - 'README.md'
     - 'hie.yaml'
   pull_request:
     paths-ignore:
@@ -30,7 +29,6 @@ on:
     - 'notebooks/**'
     - 'flake.nix'
     - 'flake.lock'
-    - 'README.md'
     - 'README.md'
     - 'hie.yaml'
 
