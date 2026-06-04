@@ -27,6 +27,7 @@ module IHaskell.Types (
     ExecuteReplyStatus(..),
     KernelState(..),
     LintStatus(..),
+    LogLevel(..),
     Width,
     Height,
     Display(..),
@@ -188,8 +189,8 @@ data KernelState =
          , useShowTypes :: Bool
          , usePager :: Bool
          , openComms :: Map UUID Widget
-         , kernelDebug :: Bool
-         , supportLibrariesAvailable :: Bool
+          , kernelLogLevel :: LogLevel
+          , supportLibrariesAvailable :: Bool
          , htmlCodeWrapperClass :: Maybe String -- ^ HTML output: class name for wrapper div
          , htmlCodeTokenPrefix :: String        -- ^ HTML output: class name prefix for token spans
          }
@@ -204,7 +205,7 @@ defaultKernelState = KernelState
   , useShowTypes = False
   , usePager = True
   , openComms = mempty
-  , kernelDebug = False
+  , kernelLogLevel = LogInfo
   , supportLibrariesAvailable = True
   , htmlCodeWrapperClass = Just "CodeMirror cm-s-jupyter cm-s-ipython"
   , htmlCodeTokenPrefix = "cm-"
@@ -232,6 +233,10 @@ kernelOpts =
   , KernelOpt ["pager"] [] $ \state -> state { usePager = True }
   , KernelOpt ["no-pager"] [] $ \state -> state { usePager = False }
   ]
+
+-- | Log levels for kernel debugging output.
+data LogLevel = LogError | LogWarn | LogInfo | LogDebug
+  deriving (Eq, Ord, Show)
 
 -- | Current HLint status.
 data LintStatus = LintOn

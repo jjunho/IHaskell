@@ -163,9 +163,11 @@ typeCleaner = useStringType . foldl' (.) id (map (`replace` "") fullPrefixes)
     fullPrefixes = map (++ ".") ignoreTypePrefixes
     useStringType = replace "[Char]" "String"
 
--- MonadIO constraint necessary for GHC 7.6
-write :: (MonadIO m, GhcMonad m) => KernelState -> String -> m ()
-write state x = when (kernelDebug state) $ liftIO $ hPutStrLn stderr $ "DEBUG: " ++ x
+-- | Write a debug log message.  The message is only emitted when the kernel's
+-- configured log level is at least 'LogDebug'.
+writeLog :: (MonadIO m, GhcMonad m) => KernelState -> LogLevel -> String -> m ()
+writeLog state lvl msg = when (lvl <= kernelLogLevel state) $
+  liftIO $ hPutStrLn stderr $ "[" ++ show lvl ++ "] " ++ msg
 
 type Interpreter = Ghc
 
@@ -624,12 +626,12 @@ wrapExecution state exec = safely state $
 -- | Return the display data for this command, as well as whether it resulted in an error.
 evalCommand :: Publisher -> CodeBlock -> KernelState -> Interpreter EvalOut
 evalCommand _ (Import importStr) state = wrapExecution state $ do
-  write state $ "Import: " ++ importStr
+  writeLog state LogDebug $ "Import: " ++ importStr
   evalImport importStr
   return mempty
 
 evalCommand _ (Module contents) state = wrapExecution state $ do
-  write state $ "Module:\n" ++ contents
+  writeLog state LogDebug $ "Module:\n" ++ contents
 
   -- Write the module contents to a temporary file in our work directory
   namePieces <- getModuleName contents
@@ -678,7 +680,7 @@ evalCommand _ (Module contents) state = wrapExecution state $ do
 
 -- | Directives set via `:set`.
 evalCommand _output (Directive SetDynFlag flagsStr) state = safely state $ do
-  write state $ "All Flags: " ++ flagsStr
+  writeLog state LogDebug $ "All Flags: " ++ flagsStr
 
   -- Find which flags are IHaskell flags, and which are GHC flags
   let flags = words flagsStr
@@ -690,8 +692,8 @@ evalCommand _output (Directive SetDynFlag flagsStr) state = safely state $ do
 
       (ihaskellFlags, ghcFlags) = partition (isJust . ihaskellFlagUpdater) flags
 
-  write state $ "IHaskell Flags: " ++ unwords ihaskellFlags
-  write state $ "GHC Flags: " ++ unwords ghcFlags
+  writeLog state LogDebug $ "IHaskell Flags: " ++ unwords ihaskellFlags
+  writeLog state LogDebug $ "GHC Flags: " ++ unwords ghcFlags
 
   if null flags
     then do
@@ -741,12 +743,12 @@ evalCommand _output (Directive SetDynFlag flagsStr) state = safely state $ do
           }
 
 evalCommand output (Directive SetExtension opts) state = do
-  write state $ "Extension: " ++ opts
+  writeLog state LogDebug $ "Extension: " ++ opts
   let set = concatMap (" -X" ++) $ words opts
   evalCommand output (Directive SetDynFlag set) state
 
 evalCommand _output (Directive LoadModule mods) state = wrapExecution state $ do
-  write state $ "Load Module: " ++ mods
+  writeLog state LogDebug $ "Load Module: " ++ mods
   let stripped@(firstChar:remainder) = mods
       (modules, removeModule) =
         case firstChar of
@@ -761,7 +763,7 @@ evalCommand _output (Directive LoadModule mods) state = wrapExecution state $ do
   return mempty
 
 evalCommand _output (Directive SetOption opts) state = do
-  write state $ "Option: " ++ opts
+  writeLog state LogDebug $ "Option: " ++ opts
   let nonExisting = filter (not . optionExists) $ words opts
   if not $ null nonExisting
     then let err = "No such options: " ++ intercalate ", " nonExisting
@@ -790,18 +792,18 @@ evalCommand _output (Directive SetOption opts) state = do
       find (elem opt . getOptionName) kernelOpts
 
 evalCommand _ (Directive GetType expr) state = wrapExecution state $ do
-  write state $ "Type: " ++ expr
+  writeLog state LogDebug $ "Type: " ++ expr
   formatType <$> ((expr ++ " :: ") ++) <$> getType expr
 
 evalCommand _ (Directive GetKind expr) state = wrapExecution state $ do
-  write state $ "Kind: " ++ expr
+  writeLog state LogDebug $ "Kind: " ++ expr
   (_, kind) <- GHC.typeKind False expr
   flags <- getSessionDynFlags
   let typeStr = showSDocUnqual flags $ ppr kind
   return $ formatType $ expr ++ " :: " ++ typeStr
 
 evalCommand _ (Directive GetKindBang expr) state = wrapExecution state $ do
-  write state $ "Kind!: " ++ expr
+  writeLog state LogDebug $ "Kind!: " ++ expr
   (typ, kind) <- GHC.typeKind True expr
   flags <- getSessionDynFlags
   let kindStr = text expr <+> dcolon <+> ppr kind
@@ -810,7 +812,7 @@ evalCommand _ (Directive GetKindBang expr) state = wrapExecution state $ do
   return $ formatType finalStr
 
 evalCommand _ (Directive LoadFile names) state = wrapExecution state $ do
-  write state $ "Load: " ++ names
+  writeLog state LogDebug $ "Load: " ++ names
 
   displays <- forM (words names) $ \name -> do
                 let filename = if ".hs" `isSuffixOf` name
@@ -906,7 +908,7 @@ evalCommand publish (Directive ShellCmd cmd) state = wrapExecution state $
       loop
 -- This is taken largely from GHCi's info section in InteractiveUI.
 evalCommand _ (Directive GetHelp _) state = do
-  write state "Help via :help or :?."
+  writeLog state LogDebug "Help via :help or :?."
   return
     EvalOut
       { evalStatus = Success
@@ -943,7 +945,7 @@ evalCommand _ (Directive GetHelp _) state = do
 
 -- This is taken largely from GHCi's info section in InteractiveUI.
 evalCommand _ (Directive GetInfo str) state = safely state $ do
-  write state $ "Info: " ++ str
+  writeLog state LogDebug $ "Info: " ++ str
   -- Get all the info for all the names we're given.
   strings <- unlines <$> getDescription str
 
@@ -997,7 +999,7 @@ evalCommand output (Statement stmt) state = wrapExecution state $ evalStatementO
                                                                     (CapturedStmt stmt)
 
 evalCommand output (Expression expr) state = do
-  write state $ "Expression:\n" ++ expr
+  writeLog state LogDebug $ "Expression:\n" ++ expr
 
   -- Try to use `display` to convert our type into the output Dislay If typechecking fails and there
   -- is no appropriate typeclass instance, this will throw an exception and thus `attempt` will return
@@ -1014,16 +1016,16 @@ evalCommand output (Expression expr) state = do
   let anyExpr = printf "((id :: IHaskellPrelude.Int -> IHaskellPrelude.Int) (%s))" expr :: String
   isTHDeclaration <- liftM2 (&&) (attempt $ exprType TM_Inst declExpr) (not <$> attempt (exprType TM_Inst anyExpr))
 
-  write state $ "Can Display: " ++ show canRunDisplay
-  write state $ "Is Widget: " ++ show isWidget
-  write state $ "Is Declaration: " ++ show isTHDeclaration
+  writeLog state LogDebug $ "Can Display: " ++ show canRunDisplay
+  writeLog state LogDebug $ "Is Widget: " ++ show isWidget
+  writeLog state LogDebug $ "Is Declaration: " ++ show isTHDeclaration
 
   if isTHDeclaration
     then
     -- If it typechecks as a DecsQ, we do not want to display the DecsQ, we just want the
     -- declaration made.
     do
-      _ <- write state "Suppressing display for template haskell declaration"
+      _ <- writeLog state LogDebug "Suppressing display for template haskell declaration"
       _ <- GHC.runDecls expr
       return
         EvalOut
@@ -1143,7 +1145,7 @@ evalCommand output (Expression expr) state = do
 
 
 evalCommand _ (Declaration decl) state = wrapExecution state $ do
-  write state $ "Declaration:\n" ++ decl
+  writeLog state LogDebug $ "Declaration:\n" ++ decl
   boundNames <- evalDeclarations decl
   let nonDataNames = filter (not . isUpper . head) boundNames
 
@@ -1165,7 +1167,7 @@ evalCommand _ (TypeSignature sig) state = wrapExecution state $
   return $ displayError $ "The type signature " ++ sig ++ "\nlacks an accompanying binding."
 
 evalCommand _ (ParseError loc err) state = do
-  write state "Parse Error."
+  writeLog state LogDebug "Parse Error."
   return
     EvalOut
       { evalStatus = Failure
@@ -1179,7 +1181,7 @@ evalCommand _ (Pragma (PragmaUnsupported pragmaType) _pragmas) state = wrapExecu
   return $ displayError $ "Pragmas of type " ++ pragmaType ++ "\nare not supported."
 
 evalCommand output (Pragma PragmaLanguage pragmas) state = do
-  write state $ "Got LANGUAGE pragma " ++ show pragmas
+  writeLog state LogDebug $ "Got LANGUAGE pragma " ++ show pragmas
   evalCommand output (Directive SetExtension $ unwords pragmas) state
 
 hoogleResults :: KernelState -> [Hoogle.HoogleResult] -> EvalOut
@@ -1551,9 +1553,9 @@ evalStatementOrIO publish state cmd = do
 
   case cmd of
     CapturedStmt stmt ->
-      write state $ "Statement:\n" ++ stmt
+      writeLog state LogDebug $ "Statement:\n" ++ stmt
     CapturedIO _ ->
-      write state "Evaluating Action"
+      writeLog state LogDebug "Evaluating Action"
 
   (printed, result) <- capturedEval (flip output Success) cmd
   case result of
@@ -1568,7 +1570,7 @@ evalStatementOrIO publish state cmd = do
           oput = [ plain printed
                    | not . null $ strip printed ]
 
-      write state $ "Names: " ++ show allNames
+      writeLog state LogDebug $ "Names: " ++ show allNames
 
       -- Display the types of all bound names if the option is on. This is similar to GHCi :set +t.
       if not $ useShowTypes state

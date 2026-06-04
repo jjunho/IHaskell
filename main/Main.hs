@@ -170,7 +170,7 @@ runKernel kOpts profileSrc = do
   -- Create initial state in the directory the kernel *should* be in.
   state <- initialKernelState kOpts
   modifyMVar_ state $ \kernelState -> return $
-    kernelState { kernelDebug = debug }
+    kernelState { kernelLogLevel = if debug then LogDebug else LogInfo }
 
   -- Receive and reply to all messages on the shell socket.
   interpret libdir True True $ \hasSupportLibraries -> do
