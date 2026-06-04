@@ -9,7 +9,9 @@ module IHaskell.Eval.Evaluate.Commands (
     doLoadModule,
     doReload,
     moduleUnloadHandler,
+#ifdef USE_HOOGLE
     hoogleResults,
+#endif
     ) where
 
 import           IHaskellPrelude
@@ -114,6 +116,7 @@ wrapExecution state exec = safely state $
     return EvalOut { evalStatus = Success, evalResult = res
                    , evalState = state, evalPager = [], evalMsgs = [] }
 
+#ifdef USE_HOOGLE
 -- | Hoogle search results as an EvalOut.
 hoogleResults :: KernelState -> [Hoogle.HoogleResult] -> EvalOut
 hoogleResults state results =
@@ -122,6 +125,7 @@ hoogleResults state results =
                         , html' (Just ihaskellCSS) $ unlines $ map (Hoogle.render Hoogle.HTML) results
                         ]
           , evalMsgs = [] }
+#endif
 
 -- | Shared exception handler for module load/reload failures.
 moduleUnloadHandler :: String -> [InteractiveImport] -> SomeException -> Ghc Display
@@ -176,9 +180,12 @@ doReload = do
   flip gcatch (moduleUnloadHandler "reload" importedModules) $ do
     flags <- getSessionDynFlags
     errRef <- liftIO $ newIORef []
+    let logAction = \_lflags _msgclass _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
     _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo flags { backend = objTarget flags }
+    pushLogHookM (const logAction)
     oldTargets <- getTargets
     result <- load LoadAllTargets
+    popLogHookM
     initializeItVariable
     case result of Failed -> setTargets oldTargets; Succeeded{} -> return ()
     setContext importedModules

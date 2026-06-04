@@ -101,7 +101,11 @@ import           GHC hiding (Stmt, TypeSig)
 import           IHaskell.CSS (ihaskellCSS)
 import           IHaskell.Eval.Evaluate.Compat
 import           IHaskell.Eval.Evaluate.Format
-import           IHaskell.Eval.Evaluate.Commands (EvalOut(..), safely, wrapExecution, doLoadModule, doReload, moduleUnloadHandler, hoogleResults)
+import           IHaskell.Eval.Evaluate.Commands (EvalOut(..), safely, wrapExecution, doLoadModule, doReload, moduleUnloadHandler
+#ifdef USE_HOOGLE
+                                                   , hoogleResults
+#endif
+                                                   )
 import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
