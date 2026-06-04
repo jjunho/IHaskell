@@ -23,6 +23,7 @@ module IHaskell.Eval.Evaluate (
 import           IHaskellPrelude
 
 import           Control.Concurrent (forkIO, threadDelay)
+import           Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVar)
 import           Control.Monad.Trans.State (runStateT)
 import           Data.Foldable (foldMap)
 import           Prelude (head, tail, last, init)
@@ -1096,7 +1097,7 @@ capturedEval output stmt = do
 #endif
 
   -- Keep track of whether execution has completed.
-  completed <- liftIO $ newMVar False
+  completed <- liftIO $ newTVarIO False
   finishedReading <- liftIO newEmptyMVar
   outputAccum <- liftIO $ newMVar ""
 
@@ -1113,7 +1114,7 @@ capturedEval output stmt = do
       loop = do
         -- Wait and then check if the computation is done.
         threadDelay delay
-        computationDone <- readMVar completed
+        computationDone <- readTVarIO completed
 
         if not computationDone
           then do
@@ -1136,7 +1137,7 @@ capturedEval output stmt = do
 
   result <- gfinally (runWithResult stmt) $ do
               -- Execution is done.
-              liftIO $ modifyMVar_ completed (const $ return True)
+              liftIO $ atomically $ writeTVar completed True
 
               -- Finalize evaluation context.
               forM_ postStmts goStmt
