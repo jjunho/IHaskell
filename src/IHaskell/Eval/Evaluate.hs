@@ -102,13 +102,16 @@ import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
 import           IHaskell.Display
-import qualified IHaskell.Eval.Hoogle as Hoogle
 import           IHaskell.Eval.Util
 import           IHaskell.BrokenPackages
 import           StringUtils (replace, split, strip, rstrip)
 
 #ifdef USE_HLINT
 import           IHaskell.Eval.Lint
+#endif
+
+#ifdef USE_HOOGLE
+import qualified IHaskell.Eval.Hoogle as Hoogle
 #endif
 
 import qualified Data.Text as Text
@@ -963,13 +966,23 @@ evalCommand _ (Directive GetInfo str) state = safely state $ do
       , evalMsgs = []
       }
 
+#ifdef USE_HOOGLE
 evalCommand _ (Directive SearchHoogle query) state = safely state $ do
   results <- liftIO $ Hoogle.search query
   return $ hoogleResults state results
+#else
+evalCommand _ (Directive SearchHoogle _query) state = safely state $
+  return $ displayError "Hoogle support not available. Rebuild with -f use-hoogle."
+#endif
 
+#ifdef USE_HOOGLE
 evalCommand _ (Directive GetDoc query) state = safely state $ do
   results <- liftIO $ Hoogle.document query
   return $ hoogleResults state results
+#else
+evalCommand _ (Directive GetDoc _query) state = safely state $
+  return $ displayError "Hoogle support not available. Rebuild with -f use-hoogle."
+#endif
 
 evalCommand _ (Directive SPrint binding) state = wrapExecution state $ do
   flags <- getSessionDynFlags
@@ -1184,6 +1197,7 @@ evalCommand output (Pragma PragmaLanguage pragmas) state = do
   write state $ "Got LANGUAGE pragma " ++ show pragmas
   evalCommand output (Directive SetExtension $ unwords pragmas) state
 
+#ifdef USE_HOOGLE
 hoogleResults :: KernelState -> [Hoogle.HoogleResult] -> EvalOut
 hoogleResults state results =
   EvalOut
@@ -1195,6 +1209,7 @@ hoogleResults state results =
                   ]
     , evalMsgs = []
     }
+#endif
 
 doLoadModule :: String -> String -> Ghc Display
 doLoadModule name modName = do

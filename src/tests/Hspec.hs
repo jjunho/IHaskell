@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Main where
 
 import           Prelude
@@ -13,7 +14,9 @@ import           Test.Hspec
 import           IHaskell.Test.Completion (testCompletions)
 import           IHaskell.Test.Parser (testParser)
 import           IHaskell.Test.Eval (testEval)
+#ifdef USE_HOOGLE
 import           IHaskell.Test.Hoogle (testHoogle)
+#endif
 
 main :: IO ()
 main = do
@@ -32,4 +35,6 @@ main = do
     testParser
     testEval
     testCompletions
+#ifdef USE_HOOGLE
     testHoogle
+#endif

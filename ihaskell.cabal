@@ -53,6 +53,11 @@ flag use-hlint
   default:     True
   manual:      True
 
+flag use-hoogle
+  description: Include Hoogle online search support (requires network access)
+  default:     True
+  manual:      True
+
 library
   hs-source-dirs:      src
   default-language:    Haskell2010
@@ -74,21 +79,18 @@ library
                        ghc                   >=8.4 && <9.15,
                        ghc-boot              ,
                        haskeline             ,
-                       parsec                ,
+                        parsec                ,
                         process               ,
                         stm                   ,
-                       text                  ,
-                       time                  ,
-                       transformers          ,
-                       aeson                 >=1.0,
-                       base64-bytestring     >=1.0,
-                       cmdargs               >=0.10,
-                       ghc-parser            >=0.2.1,
-                       ghc-paths             >=0.1,
-                       http-client           >=0.4,
-                       http-client-tls       >=0.2,
+                        text                  ,
+                        time                  ,
+                        transformers          ,
+                        aeson                 >=1.0,
+                        base64-bytestring     >=1.0,
+                        cmdargs               >=0.10,
+                        ghc-parser            >=0.2.1,
+                        ghc-paths             >=0.1,
                         split                 >=0.2,
-                       strict                >=0.3,
                        unordered-containers  -any,
                        utf8-string           -any,
                        vector                -any,
@@ -103,9 +105,8 @@ library
                    IHaskell.Eval.Inspect
                    IHaskell.Eval.Evaluate
                    IHaskell.Eval.Info
-                   IHaskell.Eval.Parser
-                   IHaskell.Eval.Hoogle
-                   IHaskell.Eval.ParseShell
+                    IHaskell.Eval.Parser
+                    IHaskell.Eval.ParseShell
                    IHaskell.Eval.Widgets
                    IHaskell.Eval.Util
                    IHaskell.Publish
@@ -128,6 +129,12 @@ library
 
   if flag(use-hlint) && impl (ghc < 8.10)
     build-depends: haskell-src-exts     >=1.18
+
+  if flag(use-hoogle)
+    exposed-modules: IHaskell.Eval.Hoogle
+    build-depends: http-client >=0.4,
+                   http-client-tls >=0.2
+    cpp-options: -DUSE_HOOGLE
 
   if os(windows)
     exposed-modules:
@@ -162,9 +169,8 @@ executable ihaskell
                        process              ,
                        aeson                ,
                        ihaskell             ,
-                       ipython-kernel       ,
-                       strict               ,
-                       unordered-containers
+                        ipython-kernel       ,
+                        unordered-containers
 
   if !os(windows)
     build-depends: unix
