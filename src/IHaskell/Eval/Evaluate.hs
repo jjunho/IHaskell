@@ -476,12 +476,12 @@ evaluate kernelState code output widgetHandler = do
                     then do
                       getEncodedDisplays <- extractValue "IHaskell.Display.displayFromChanEncoded"
                       case getEncodedDisplays of
-                        Left err -> error $ "Deserialization error (Evaluate.hs): " ++ err
+                        Left _err -> return Nothing
                         Right displaysIO -> do
                           result <- liftIO displaysIO
                           case Binary.decodeOrFail result of
-                            Left (_, _, err) -> error $ "Deserialization error (Evaluate.hs): " ++ err
-                            Right (_, _, res) -> return res
+                            Left _ -> return Nothing
+                            Right (_, _, res) -> return (Just res)
                     else return Nothing
       let result =
             case dispsMay of
@@ -632,51 +632,47 @@ evalCommand _ (Import importStr) state = wrapExecution state $ do
 
 evalCommand _ (Module contents) state = wrapExecution state $ do
   write state $ "Module:\n" ++ contents
+  modResult <- getModuleName contents
+  case modResult of
+    Left err -> return $ displayError err
+    Right namePieces -> do
+      -- Write the module contents to a temporary file in our work directory
+      let directory = "./" ++ intercalate "/" (init namePieces) ++ "/"
+          filename = last namePieces ++ ".hs"
+      liftIO $ do
+        createDirectoryIfMissing True directory
+        writeFile (directory ++ filename) contents
 
-  -- Write the module contents to a temporary file in our work directory
-  namePieces <- getModuleName contents
-  let directory = "./" ++ intercalate "/" (init namePieces) ++ "/"
-      filename = last namePieces ++ ".hs"
-  liftIO $ do
-    createDirectoryIfMissing True directory
-    writeFile (directory ++ filename) contents
+      -- Clear old modules of this name
+      let modName = intercalate "." namePieces
+      removeTarget $ TargetModule $ mkModuleName modName
+      removeTarget $ TargetFile filename Nothing
 
-  -- Clear old modules of this name
-  let modName = intercalate "." namePieces
-  removeTarget $ TargetModule $ mkModuleName modName
-  removeTarget $ TargetFile filename Nothing
+      -- Remember which modules we've loaded before.
+      importedModules <- getContext
 
-  -- Remember which modules we've loaded before.
-  importedModules <- getContext
+      let
+          -- Get the dot-delimited pieces of the module name.
+          moduleNameOf :: InteractiveImport -> [String]
+          moduleNameOf (IIDecl decl) = split "." . moduleNameString . unLoc . ideclName $ decl
+  #if MIN_VERSION_ghc(9,14,0)
+          moduleNameOf (IIModule imp) = split "." . moduleNameString $ moduleName imp
+  #else
+          moduleNameOf (IIModule imp) = split "." . moduleNameString $ imp
+  #endif
 
-  let
-      -- Get the dot-delimited pieces of the module name.
-      moduleNameOf :: InteractiveImport -> [String]
-      moduleNameOf (IIDecl decl) = split "." . moduleNameString . unLoc . ideclName $ decl
-#if MIN_VERSION_ghc(9,14,0)
-      moduleNameOf (IIModule imp) = split "." . moduleNameString $ moduleName imp
-#else
-      moduleNameOf (IIModule imp) = split "." . moduleNameString $ imp
-#endif
+          -- Return whether this module prevents the loading of the one we're trying to load.
+          preventsLoading md =
+            let pieces = moduleNameOf md
+            in last namePieces == last pieces && namePieces /= pieces
 
-      -- Return whether this module prevents the loading of the one we're trying to load. If a module B
-      -- exist, we cannot load A.B. All modules must have unique last names (where A.B has last name B).
-      -- However, we *can* just reload a module.
-      preventsLoading md =
-        let pieces = moduleNameOf md
-        in last namePieces == last pieces && namePieces /= pieces
-
-  -- If we've loaded anything with the same last name, we can't use this. Otherwise, GHC tries to load
-  -- the original *.hs fails and then fails.
-  case find preventsLoading importedModules of
-    -- If something prevents loading this module, return an error.
-    Just previous -> do
-      let prevLoaded = intercalate "." (moduleNameOf previous)
-      return $ displayError $
-        printf "Can't load module %s because already loaded %s" modName prevLoaded
-
-    -- Since nothing prevents loading the module, compile and load it.
-    Nothing -> doLoadModule modName modName
+      -- If we've loaded anything with the same last name, we can't use this.
+      case find preventsLoading importedModules of
+        Just previous -> do
+          let prevLoaded = intercalate "." (moduleNameOf previous)
+          return $ displayError $
+            printf "Can't load module %s because already loaded %s" modName prevLoaded
+        Nothing -> doLoadModule modName modName
 
 -- | Directives set via `:set`.
 evalCommand _output (Directive SetDynFlag flagsStr) state = safely state $ do
@@ -819,8 +815,12 @@ evalCommand _ (Directive LoadFile names) state = wrapExecution state $ do
                                  then name
                                  else name ++ ".hs"
                 contents <- liftIO $ readFile filename
-                modName <- intercalate "." <$> getModuleName contents
-                doLoadModule filename modName
+                modResult <- getModuleName contents
+                case modResult of
+                  Left _err -> return $ displayError $
+                    printf "Could not parse module name from %s" filename
+                  Right namePieces ->
+                    doLoadModule filename (intercalate "." namePieces)
   return (ManyDisplay displays)
 
 evalCommand _ (Directive Reload _) state = wrapExecution state doReload
@@ -1099,11 +1099,11 @@ evalCommand output (Expression expr) state = do
 
           -- Convert from the bytestring into a display.
           case fromDynamic displayedBytestring of
-            Nothing -> error "Expecting lazy Bytestring"
+            Nothing -> return $ displayError "Expecting lazy Bytestring"
             Just bytestringIO -> do
               bytestring <- liftIO bytestringIO
               case Binary.decodeOrFail bytestring of
-                Left (_, _, err) -> error err
+                Left (_, _, err) -> return $ displayError err
                 Right (_, _, disp) ->
                   return $
                     if useSvg state
@@ -1593,7 +1593,7 @@ evalStatementOrIO publish state cmd = do
               txt -> Display [plain $ joined ++ "\n" ++ txt, html' (Just ihaskellCSS) $ htmled ++ mono txt]
 
     ExecComplete (Left exception) _ -> throw exception
-    ExecBreak{} -> error "Should not break."
+    ExecBreak{} -> return $ displayError "Unexpected breakpoint encountered"
 
 -- Read from a file handle until we hit a delimiter or until we've read as many characters as
 -- requested
