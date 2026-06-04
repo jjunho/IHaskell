@@ -25,10 +25,6 @@ module IHaskellPrelude (
   System.IO.writeFile,
   System.IO.Handle,
 
-  System.IO.Strict.readFile,
-  System.IO.Strict.getContents,
-  System.IO.Strict.hGetContents,
-
   Control.Exception.catch,
   Control.Exception.SomeException,
 
@@ -101,7 +97,6 @@ import qualified Data.Function
 import qualified Data.List.NonEmpty
 import qualified GHC.Exts
 import qualified System.IO
-import qualified System.IO.Strict
 import qualified GHC.IO
 import qualified Text.Printf
 import qualified Control.Exception

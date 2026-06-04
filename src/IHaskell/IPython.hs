@@ -36,6 +36,7 @@ import qualified GHC.Paths
 import           IHaskell.Types
 
 import           Control.Exception (bracket)
+import           System.Directory (getTemporaryDirectory)
 import           StringUtils (replace, split)
 
 data KernelSpecOptions =
@@ -73,15 +74,23 @@ defaultKernelSpecOptions = KernelSpecOptions
   , kernelSpecDisplayName = "Haskell"
   }
 
--- | Verify that a proper version of IPython is installed and accessible.
-verifyIPythonVersion :: IO ()
-verifyIPythonVersion = do
+-- | Resolve the Jupyter binary, falling back to IPython.
+locateJupyter :: IO FilePath
+locateJupyter = do
   jupyterMay <- findExecutable "jupyter"
   case jupyterMay of
+    Just j  -> return j
     Nothing -> do
-      hPutStrLn IO.stderr "No Jupyter / IPython detected -- install Jupyter 3.0+ before using IHaskell."
-      exitFailure
-    Just _ -> pure ()
+      ipythonMay <- findExecutable "ipython"
+      case ipythonMay of
+        Just j  -> return j
+        Nothing -> do
+          hPutStrLn IO.stderr "No Jupyter / IPython detected -- install Jupyter 3.0+ before using IHaskell."
+          exitFailure
+
+-- | Verify that a proper version of IPython is installed and accessible.
+verifyIPythonVersion :: IO ()
+verifyIPythonVersion = void locateJupyter
 
 -- | Create the directory and return it.
 ensure :: FilePath -> IO FilePath
@@ -155,12 +164,12 @@ installKernelspec repl opts = do
         installPrefixFlag = maybe ["--user"] (\prefix -> ["--prefix", prefix]) (kernelSpecInstallPrefix opts)
         cmd = concat [["kernelspec", "install"], installPrefixFlag, [kernelDir], replaceFlag]
 
-    let runFn = if kernelSpecDebug opts then id else (\_ -> return ())
-    (exitCode, stdout, stderr) <- readProcessWithExitCode "jupyter" cmd ""
-    runFn $ stdout ++ stderr
+    jupyter <- locateJupyter
+    (exitCode, stdout, stderr) <- readProcessWithExitCode jupyter cmd ""
+    when (kernelSpecDebug opts) $ hPutStrLn IO.stdout (stdout ++ stderr)
     case exitCode of
       ExitSuccess -> return ()
-      ExitFailure _ -> hPutStrLn IO.stderr $ "jupyter kernelspec install failed: " ++ stderr
+      ExitFailure _ -> hPutStrLn IO.stderr $ jupyter ++ " kernelspec install failed: " ++ stderr
 
 installLabextension :: Bool -> IO ()
 installLabextension debug = do
@@ -171,7 +180,8 @@ installLabextension debug = do
         FP.</> "labextension"
 
   -- Find the $(jupyter --data-dir)/labextensions/jupyterlab-ihaskell directory
-  jupyterDataDir <- T.strip . T.pack <$> readProcess "jupyter" ["--data-dir"] ""
+  jupyter <- locateJupyter
+  jupyterDataDir <- T.strip . T.pack <$> readProcess jupyter ["--data-dir"] ""
   let jupyterlabIHaskellDir = T.unpack jupyterDataDir
         FP.</> "labextensions"
         FP.</> "jupyterlab-ihaskell"
@@ -244,8 +254,9 @@ cpRecursive src dst = do
 -- Uses 'bracket' for exception safety, so no temp directories leak.
 withTempDir :: (FilePath -> IO a) -> IO a
 withTempDir action = do
+  tmpRoot <- getTemporaryDirectory
   u <- show <$> newUnique
-  let tmpDir = "/tmp/ihaskell-" ++ u
+  let tmpDir = tmpRoot FP.</> "ihaskell-" ++ u
   createDirectory tmpDir
   bracket
     (return tmpDir)

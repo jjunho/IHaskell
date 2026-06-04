@@ -481,11 +481,15 @@ evaluate kernelState code output widgetHandler = do
                     then do
                       getEncodedDisplays <- extractValue "IHaskell.Display.displayFromChanEncoded"
                       case getEncodedDisplays of
-                        Left _err -> return Nothing
+                        Left err -> do
+                          writeLog state LogWarn $ "Deserialization error (Evaluate.hs): " ++ err
+                          return Nothing
                         Right displaysIO -> do
                           result <- liftIO displaysIO
                           case Binary.decodeOrFail result of
-                            Left _ -> return Nothing
+                            Left (_, _, err) -> do
+                              writeLog state LogWarn $ "Deserialization error (Evaluate.hs): " ++ err
+                              return Nothing
                             Right (_, _, res) -> return (Just res)
                     else return Nothing
       let result =

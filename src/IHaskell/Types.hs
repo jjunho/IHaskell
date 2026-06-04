@@ -189,8 +189,8 @@ data KernelState =
          , useShowTypes :: Bool
          , usePager :: Bool
          , openComms :: Map UUID Widget
-          , kernelLogLevel :: LogLevel
-          , supportLibrariesAvailable :: Bool
+         , kernelLogLevel :: LogLevel
+         , supportLibrariesAvailable :: Bool
          , htmlCodeWrapperClass :: Maybe String -- ^ HTML output: class name for wrapper div
          , htmlCodeTokenPrefix :: String        -- ^ HTML output: class name prefix for token spans
          }

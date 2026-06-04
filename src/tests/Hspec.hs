@@ -18,6 +18,8 @@ import           IHaskell.Test.Eval (testEval)
 import           IHaskell.Test.Hoogle (testHoogle)
 #endif
 
+import           IHaskell.Test.Properties (testProperties)
+
 main :: IO ()
 main = do
   currentDir <- getCurrentDirectory
@@ -35,6 +37,7 @@ main = do
     testParser
     testEval
     testCompletions
+    testProperties
 #ifdef USE_HOOGLE
     testHoogle
 #endif

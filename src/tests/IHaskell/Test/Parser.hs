@@ -91,10 +91,11 @@ testModuleNames = describe "Get Module Name" $ do
   where
     isLeft (Left _) = True
     isLeft _ = False
-  where
-    named str result = do
+
+    named :: String -> [String] -> IO ()
+    named str expected = do
       res <- ghc $ getModuleName str
-      res `shouldBe` result
+      res `shouldBe` Right expected
 
 
 testParseShell :: Spec

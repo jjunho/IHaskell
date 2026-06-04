@@ -32,8 +32,9 @@ import           Data.Version (showVersion)
 import           IHaskell.Convert (convert)
 import           IHaskell.Eval.Completion (complete)
 import           IHaskell.Eval.Inspect (inspect)
-import           IHaskell.Eval.Evaluate
-import           IHaskell.Eval.Evaluate (gcatch, throw)
+import           IHaskell.Eval.Evaluate (interpret, testInterpret, testEvaluate,
+                   evaluate, flushWidgetMessages, Interpreter, liftIO,
+                   typeCleaner, formatType, capturedIO, gcatch, throw)
 import           IHaskell.Display
 import           IHaskell.Eval.Widgets (widgetHandler)
 import           IHaskell.Flags
