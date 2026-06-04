@@ -16,6 +16,8 @@ module IHaskell.Eval.Evaluate (
     typeCleaner,
     formatType,
     capturedIO,
+    gcatch,
+    throw,
     ) where
 
 import           IHaskellPrelude

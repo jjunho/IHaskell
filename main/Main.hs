@@ -15,7 +15,7 @@ import           Control.Arrow (second)
 import           Data.Aeson hiding (Success)
 import           System.Process (readProcess, readProcessWithExitCode)
 import           System.Exit (exitSuccess, ExitCode)
-import           Control.Exception (try)
+import           Control.Exception (try, SomeException)
 import           System.Environment (getArgs)
 import           System.Environment (setEnv)
 #ifdef mingw32_HOST_OS
@@ -33,6 +33,7 @@ import           IHaskell.Convert (convert)
 import           IHaskell.Eval.Completion (complete)
 import           IHaskell.Eval.Inspect (inspect)
 import           IHaskell.Eval.Evaluate
+import           IHaskell.Eval.Evaluate (gcatch, throw)
 import           IHaskell.Display
 import           IHaskell.Eval.Widgets (widgetHandler)
 import           IHaskell.Flags
@@ -214,17 +215,28 @@ runKernel kOpts profileSrc = do
       if isCommMessage request
         then do
           oldState <- liftIO $ takeMVar state
-          let replier = writeChan (iopubChannel interface)
-              widgetMessageHandler = widgetHandler replier replyHeader
-          tempState <- handleComm replier oldState request replyHeader
-          newState <- flushWidgetMessages tempState [] widgetMessageHandler
-          liftIO $ putMVar state newState
+          gcatch
+            (do
+              let replier = writeChan (iopubChannel interface)
+                  widgetMessageHandler = widgetHandler replier replyHeader
+              tempState <- handleComm replier oldState request replyHeader
+              newState <- flushWidgetMessages tempState [] widgetMessageHandler
+              liftIO $ putMVar state newState)
+            (\(e :: SomeException) -> do
+              liftIO $ putMVar state oldState
+              throw e)
           liftIO $ writeChan repChan SendNothing
         else do
           -- Create the reply, possibly modifying kernel state.
           oldState <- liftIO $ takeMVar state
-          (newState, reply) <- replyTo kOpts interface request replyHeader oldState
-          liftIO $ putMVar state newState
+          reply <- gcatch
+            (do
+              (newState, r) <- replyTo kOpts interface request replyHeader oldState
+              liftIO $ putMVar state newState
+              return r)
+            (\(e :: SomeException) -> do
+              liftIO $ putMVar state oldState
+              throw e)
 
           -- Write the reply to the reply channel.
           liftIO $ writeChan repChan reply
