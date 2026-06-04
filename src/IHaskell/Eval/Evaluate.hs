@@ -100,6 +100,7 @@ import           GHC hiding (Stmt, TypeSig)
 import           IHaskell.CSS (ihaskellCSS)
 import           IHaskell.Eval.Evaluate.Compat
 import           IHaskell.Eval.Evaluate.Format
+import           IHaskell.Eval.Evaluate.Commands (EvalOut(..), safely, wrapExecution, doLoadModule, doReload, moduleUnloadHandler, hoogleResults)
 import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
@@ -246,23 +247,6 @@ initializeImports importSupportLibraries = do
   setContext $ map IIDecl $ implicitPrelude : imports
 
   return hasIHaskellPackage
-
--- | Give a value for the `it` variable.
-initializeItVariable :: Interpreter ()
-initializeItVariable =
-  -- This is required due to the way we handle `it` in the wrapper statements - if it doesn't exist,
-  -- the first statement will fail.
-  void $ execStmt "let it = ()" execOptions
-
--- | Output of a command evaluation.
-data EvalOut =
-       EvalOut
-         { evalStatus :: ErrorOccurred
-         , evalResult :: Display
-         , evalState :: KernelState
-         , evalPager :: [DisplayData]
-         , evalMsgs :: [WidgetMsg]
-         }
 
 cleanString :: String -> String
 cleanString istr = if allBrackets
@@ -422,55 +406,6 @@ flushWidgetMessages state evalmsgs widgetHandler = do
         -- Handle all the widget messages
         let commMessages = evalmsgs ++ messages
         widgetHandler state commMessages
-
-
-safely :: KernelState -> Interpreter EvalOut -> Interpreter EvalOut
-safely state = ghandle handler . ghandle sourceErrorHandler
-  where
-    handler :: SomeException -> Interpreter EvalOut
-    handler exception =
-      return
-        EvalOut
-          { evalStatus = Failure
-          , evalResult = displayError $ show exception
-          , evalState = state
-          , evalPager = []
-          , evalMsgs = []
-          }
-
-    sourceErrorHandler :: SourceError -> Interpreter EvalOut
-    sourceErrorHandler srcerr = do
-#if MIN_VERSION_ghc(9,4,0)
-      let msgs = bagToList . getMessages $ srcErrorMessages srcerr
-#else
-      let msgs = bagToList $ srcErrorMessages srcerr
-#endif
-      errStrs <- forM msgs $ doc . getErrMsgDoc
-
-      let fullErr = unlines errStrs
-
-      return
-        EvalOut
-          { evalStatus = Failure
-          , evalResult = displayError fullErr
-          , evalState = state
-          , evalPager = []
-          , evalMsgs = []
-          }
-
-wrapExecution :: KernelState
-              -> Interpreter Display
-              -> Interpreter EvalOut
-wrapExecution state exec = safely state $
-  exec >>= \res ->
-    return
-      EvalOut
-        { evalStatus = Success
-        , evalResult = res
-        , evalState = state
-        , evalPager = []
-        , evalMsgs = []
-        }
 
 -- | Return the display data for this command, as well as whether it resulted in an error.
 evalCommand :: Publisher -> CodeBlock -> KernelState -> Interpreter EvalOut
@@ -1042,181 +977,6 @@ evalCommand _ (Pragma (PragmaUnsupported pragmaType) _pragmas) state = wrapExecu
 evalCommand output (Pragma PragmaLanguage pragmas) state = do
   writeLog state LogDebug $ "Got LANGUAGE pragma " ++ show pragmas
   evalCommand output (Directive SetExtension $ unwords pragmas) state
-
-#ifdef USE_HOOGLE
-hoogleResults :: KernelState -> [Hoogle.HoogleResult] -> EvalOut
-hoogleResults state results =
-  EvalOut
-    { evalStatus = Success
-    , evalResult = mempty
-    , evalState = state
-    , evalPager = [ plain $ unlines $ map (Hoogle.render Hoogle.Plain) results
-                  , html' (Just ihaskellCSS) $ unlines $ map (Hoogle.render Hoogle.HTML) results
-                  ]
-    , evalMsgs = []
-    }
-#endif
-
-doLoadModule :: String -> String -> Ghc Display
-doLoadModule name modName = do
-  -- Remember which modules we've loaded before.
-  importedModules <- getContext
-
-  flip gcatch (unload importedModules) $ do
-    -- Compile loaded modules.
-    flags <- getSessionDynFlags
-    errRef <- liftIO $ newIORef []
-#if MIN_VERSION_ghc(9,4,0)
-    let logAction = \_lflags _msgclass _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
-#elif MIN_VERSION_ghc(9,0,0)
-    let logAction = \_dflags _warn _sev _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
-#else
-    let logAction = \_dflags _sev _srcspan _ppr _style msg -> modifyIORef' errRef (showSDoc flags msg :)
-#endif
-#if MIN_VERSION_ghc(9,2,0)
-    pushLogHookM (const logAction)
-#endif
-    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo
-      flags
-#if MIN_VERSION_ghc(9,2,0)
-        { backend = objTarget flags
-#else
-        { hscTarget = objTarget flags
-        , log_action = logAction
-#endif
-        }
-
-    -- Load the new target.
-#if MIN_VERSION_ghc(9,4,0)
-    target <- guessTarget name Nothing Nothing
-#else
-    target <- guessTarget name Nothing
-#endif
-    oldTargets <- getTargets
-    -- Add a target, but make sure targets are unique!
-    addTarget target
-    getTargets >>= return . nubBy ((==) `on` targetId) >>= setTargets
-    result <- load LoadAllTargets
-
-    -- Reset the context, since loading things screws it up.
-    initializeItVariable
-
-    -- Reset targets if we failed.
-    case result of
-      Failed      -> setTargets oldTargets
-      Succeeded{} -> return ()
-
-    -- Add imports
-    setContext $
-      case result of
-        Failed    -> importedModules
-        Succeeded -> IIDecl (simpleImportDecl $ mkModuleName modName) : importedModules
-
-    -- Switch back to interpreted mode.
-    _ <- setSessionDynFlags flags
-#if MIN_VERSION_ghc(9,2,0)
-    popLogHookM
-#endif
-
-    case result of
-      Succeeded -> return mempty
-      Failed -> do
-        errorStrs <- unlines <$> reverse <$> liftIO (readIORef errRef)
-        return $ displayError $ "Failed to load module " ++ modName ++ "\n" ++ errorStrs
-
-  where
-    unload :: [InteractiveImport] -> SomeException -> Ghc Display
-    unload imported exception = do
-      print $ show exception
-      -- Explicitly clear targets
-      setTargets []
-      _ <- load LoadAllTargets
-
-      -- Switch to interpreted mode!
-      flags <- getSessionDynFlags
-#if MIN_VERSION_ghc(9,6,0)
-      _ <- setSessionDynFlags flags { backend = interpreterBackend }
-#elif MIN_VERSION_ghc(9,2,0)
-      _ <- setSessionDynFlags flags { backend = Interpreter }
-#else
-      _ <- setSessionDynFlags flags { hscTarget = HscInterpreted }
-#endif
-
-      -- Return to old context, make sure we have `it`.
-      setContext imported
-      initializeItVariable
-
-      return $ displayError $ "Failed to load module " ++ modName ++ ": " ++ show exception
-
-doReload :: Ghc Display
-doReload = do
-  -- Remember which modules we've loaded before.
-  importedModules <- getContext
-
-  flip gcatch (unload importedModules) $ do
-    -- Compile loaded modules.
-    flags <- getSessionDynFlags
-    errRef <- liftIO $ newIORef []
-    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo
-      flags
-#if MIN_VERSION_ghc(9,2,0)
-        { backend = objTarget flags
-#elif MIN_VERSION_ghc(9,0,0)
-        { hscTarget = objTarget flags
-        , log_action = \_dflags _warn _sev _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
-#else
-        { hscTarget = objTarget flags
-        , log_action = \_dflags _sev _srcspan _ppr _style msg -> modifyIORef' errRef (showSDoc flags msg :)
-#endif
-        }
-
-    -- Store the old targets in case of failure.
-    oldTargets <- getTargets
-    result <- load LoadAllTargets
-
-    -- Reset the context, since loading things screws it up.
-    initializeItVariable
-
-    -- Reset targets if we failed.
-    case result of
-      Failed      -> setTargets oldTargets
-      Succeeded{} -> return ()
-
-    -- Add imports
-    setContext importedModules
-
-    -- Switch back to interpreted mode.
-    _ <- setSessionDynFlags flags
-
-    case result of
-      Succeeded -> return mempty
-      Failed -> do
-        errorStrs <- unlines <$> reverse <$> liftIO (readIORef errRef)
-        return $ displayError $ "Failed to reload.\n" ++ errorStrs
-
-  where
-    unload :: [InteractiveImport] -> SomeException -> Ghc Display
-    unload imported exception = do
-      print $ show exception
-      -- Explicitly clear targets
-      setTargets []
-      _ <- load LoadAllTargets
-
-      -- Switch to interpreted mode!
-      flags <- getSessionDynFlags
-#if MIN_VERSION_ghc(9,6,0)
-      _ <- setSessionDynFlags flags { backend = interpreterBackend }
-#elif MIN_VERSION_ghc(9,2,0)
-      _ <- setSessionDynFlags flags { backend = Interpreter }
-#else
-      _ <- setSessionDynFlags flags { hscTarget = HscInterpreted }
-#endif
-
-      -- Return to old context, make sure we have `it`.
-      setContext imported
-      initializeItVariable
-
-      return $ displayError "Failed to reload."
 
 
 data Captured a = CapturedStmt String

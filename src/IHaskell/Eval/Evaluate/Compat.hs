@@ -23,6 +23,7 @@ module IHaskell.Eval.Evaluate.Compat (
     writeLog,
     Interpreter,
     Publisher,
+    initializeItVariable,
     ) where
 
 import           IHaskellPrelude
@@ -268,3 +269,8 @@ type Publisher = (EvaluationResult -> ErrorOccurred -> IO ())
 writeLog :: (MonadIO m, GhcMonad m) => KernelState -> LogLevel -> String -> m ()
 writeLog state lvl msg = when (lvl <= kernelLogLevel state) $
   liftIO $ hPutStrLn stderr $ "[" ++ show lvl ++ "] " ++ msg
+
+-- | Give a value for the @it@ variable.
+initializeItVariable :: Ghc ()
+initializeItVariable =
+  void $ execStmt "let it = ()" execOptions
