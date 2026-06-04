@@ -86,7 +86,11 @@ testModuleNames = describe "Get Module Name" $ do
   it "parses module names with exports" $
     "module A.B.C ( x ) where x = 3" `named` ["A", "B", "C"]
   it "errors when given unnamed modules" $ do
-    ghc (getModuleName "x = 3") `shouldThrow` anyException
+    res <- ghc $ getModuleName "x = 3"
+    res `shouldSatisfy` isLeft
+  where
+    isLeft (Left _) = True
+    isLeft _ = False
   where
     named str result = do
       res <- ghc $ getModuleName str

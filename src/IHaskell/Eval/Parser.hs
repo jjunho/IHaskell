@@ -292,7 +292,7 @@ parseDirective _ _ = error "Directive must start with colon!"
 -- | Parse a module and return the name declared in the 'module X where' line. That line is
 -- required, and if it does not exist, this will error. Names with periods in them are returned
 -- piece by piece.
-getModuleName :: GhcMonad m => String -> m [String]
+getModuleName :: GhcMonad m => String -> m (Either String [String])
 getModuleName moduleSrc = do
   flags' <- getSessionDynFlags
   flags <- do
@@ -301,9 +301,9 @@ getModuleName moduleSrc = do
   _ <- setSessionDynFlags flags
   let output = runParser flags parserModule moduleSrc
   case output of
-    Failure{} -> error "Module parsing failed."
+    Failure{} -> return $ Left "Module parsing failed."
     Parsed mdl ->
       case unLoc <$> hsmodName (unLoc mdl) of
-        Nothing   -> error "Module must have a name."
-        Just name -> return $ split "." $ moduleNameString name
-    _ -> error "getModuleName failed, output was neither Parsed nor Failure"
+        Nothing   -> return $ Left "Module must have a name."
+        Just name -> return $ Right $ split "." $ moduleNameString name
+    _ -> return $ Left "getModuleName failed, output was neither Parsed nor Failure"
