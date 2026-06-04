@@ -8,9 +8,18 @@ module IHaskell.Eval.Evaluate.Capture (
     voidpf,
     generateInitStmts,
     generatePostStmts,
+    readChars,
+    PollConfig(..),
+    defaultPollConfig,
+    pollingLoop,
     ) where
 
 import           IHaskellPrelude
+
+import           System.IO (Handle, hGetChar)
+import           Control.Exception (try, SomeException)
+import           Control.Concurrent (threadDelay, forkIO)
+import           Control.Concurrent.STM (TVar, readTVarIO, atomically, writeTVar)
 
 -- | Generate a unique variable name by appending a suffix.
 generateVarName :: String -> String -> String
@@ -95,3 +104,58 @@ generatePostStmts suffix isWindows =
        , fmtVoid "IHaskellIO.closeFd %s" wv
        , printf "let it = %s" iv
        ]
+
+-- | Read characters from a handle, stopping at delimiters or after @n@ chars.
+readChars :: Handle -> String -> Int -> IO String
+readChars _ _ 0 = return []
+readChars hdl delims nchars = do
+  tryRead <- try $ hGetChar hdl :: IO (Either SomeException Char)
+  case tryRead of
+    Right ch ->
+      if ch `elem` delims
+        then return [ch]
+        else do
+          next <- readChars hdl delims (nchars - 1)
+          return $ ch : next
+    Left _ -> return []
+
+-- | Configuration for the output polling loop.
+data PollConfig = PollConfig
+  { pollDelay   :: Int  -- ^ Microseconds between polls (default: 100ms)
+  , pollMaxSize :: Int  -- ^ Maximum output size to read on completion
+  , pollIncSize :: Int  -- ^ Chunk size for intermediate reads
+  }
+
+-- | Default polling config: 100ms delay, 100KB max, 100-char chunks.
+defaultPollConfig :: PollConfig
+defaultPollConfig = PollConfig
+  { pollDelay   = 100 * 1000
+  , pollMaxSize = 100 * 1000
+  , pollIncSize = 100
+  }
+
+-- | Run the output polling loop.  Reads chunks from a pipe until the
+-- @completed@ 'TVar' is set to 'True', then reads remaining output and
+-- signals via the @finishedReading@ 'MVar'.
+pollingLoop :: PollConfig
+            -> Handle              -- ^ Pipe to read from
+            -> (String -> IO ())   -- ^ Callback for intermediate output
+            -> TVar Bool           -- ^ Set 'True' when computation is done
+            -> MVar Bool           -- ^ Signal when reading is finished
+            -> MVar String         -- ^ Output accumulator
+            -> IO ()
+pollingLoop cfg pipe output completed finishedReading outputAccum = loop
+  where
+    loop = do
+      threadDelay (pollDelay cfg)
+      computationDone <- readTVarIO completed
+      if not computationDone
+        then do
+          nextChunk <- readChars pipe "\n" (pollIncSize cfg)
+          modifyMVar_ outputAccum (return . (++ nextChunk))
+          readMVar outputAccum >>= output
+          loop
+        else do
+          nextChunk <- readChars pipe "" (pollMaxSize cfg)
+          modifyMVar_ outputAccum (return . (++ nextChunk))
+          putMVar finishedReading True

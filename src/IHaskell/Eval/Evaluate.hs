@@ -111,6 +111,7 @@ import           IHaskell.IPython
 import           IHaskell.Eval.Parser
 import           IHaskell.Display
 import           IHaskell.Eval.Widgets (relayWidgetMessages)
+import           IHaskell.Eval.Evaluate.Capture (readChars, pollingLoop, defaultPollConfig)
 import           IHaskell.Eval.Util
 import           IHaskell.BrokenPackages
 import           StringUtils (replace, split, strip, rstrip)
@@ -1044,38 +1045,8 @@ capturedEval output stmt = do
   outputAccum <- liftIO $ newMVar ""
 
   -- Start a loop to publish intermediate results.
-  let
-      -- Compute how long to wait between reading pieces of the output. `threadDelay` takes an
-      -- argument of microseconds.
-      ms = 1000
-      delay = 100 * ms
-
-      -- Maximum size of the output (after which we truncate).
-      maxSize = 100 * 1000
-
-      loop = do
-        -- Wait and then check if the computation is done.
-        threadDelay delay
-        computationDone <- readTVarIO completed
-
-        if not computationDone
-          then do
-            -- Read next chunk and append to accumulator.
-            nextChunk <- readChars pipe "\n" 100
-            modifyMVar_ outputAccum (return . (++ nextChunk))
-
-            -- Write to frontend and repeat.
-            readMVar outputAccum >>= output
-            loop
-          else do
-            -- Read remainder of output and accumulate it.
-            nextChunk <- readChars pipe "" maxSize
-            modifyMVar_ outputAccum (return . (++ nextChunk))
-
-            -- We're done reading.
-            putMVar finishedReading True
-
-  _ <- liftIO $ forkIO loop
+  _ <- liftIO $ forkIO $
+    pollingLoop defaultPollConfig pipe output completed finishedReading outputAccum
 
   result <- gfinally (runWithResult stmt) $ do
               -- Execution is done.
@@ -1149,16 +1120,3 @@ evalStatementOrIO publish state cmd = do
     ExecComplete (Left exception) _ -> throw exception
     ExecBreak{} -> return $ displayError "Unexpected breakpoint encountered"
 
-readChars :: Handle -> String -> Int -> IO String
-readChars _handle _delims 0 =
-  return []
-readChars hdl delims nchars = do
-  tryRead <- gtry $ hGetChar hdl :: IO (Either SomeException Char)
-  case tryRead of
-    Right ch ->
-      if ch `elem` delims
-        then return [ch]
-        else do
-          next <- readChars hdl delims (nchars - 1)
-          return $ ch : next
-    Left _ -> return []
