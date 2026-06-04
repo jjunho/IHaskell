@@ -79,9 +79,9 @@ testProperties :: Spec
 testProperties = describe "Property-based tests" $ do
   describe "Display serialization" $ do
     it "roundtrips through Binary encoding" $
-      (Hedgehog.check prop_display_roundtrip :: IO Bool) >> return ()
+      Hedgehog.check prop_display_roundtrip `shouldReturn` True
     it "is idempotent" $
-      (Hedgehog.check prop_display_idempotent :: IO Bool) >> return ()
+      Hedgehog.check prop_display_idempotent `shouldReturn` True
   describe "Display constructors" $
     it "plain text preserves content" $
-      (Hedgehog.check prop_plain_roundtrip :: IO Bool) >> return ()
+      Hedgehog.check prop_plain_roundtrip `shouldReturn` True

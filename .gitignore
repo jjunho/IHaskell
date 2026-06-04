@@ -29,4 +29,5 @@ dist-*/
 cabal.project.local
 cabal.config
 tsconfig.tsbuildinfo
-omo/
+.omo/
+.ghc.environment.*

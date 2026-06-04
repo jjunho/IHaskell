@@ -152,10 +152,29 @@ doLoadModule name modName = do
   flip gcatch (moduleUnloadHandler ("load module " ++ modName) importedModules) $ do
     flags <- getSessionDynFlags
     errRef <- liftIO $ newIORef []
+#if MIN_VERSION_ghc(9,4,0)
     let logAction = \_lflags _msgclass _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
+#elif MIN_VERSION_ghc(9,0,0)
+    let logAction = \_dflags _warn _sev _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
+#else
+    let logAction = \_dflags _sev _srcspan _ppr _style msg -> modifyIORef' errRef (showSDoc flags msg :)
+#endif
+#if MIN_VERSION_ghc(9,2,0)
     pushLogHookM (const logAction)
-    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo flags { backend = objTarget flags }
+#endif
+    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo
+      flags
+#if MIN_VERSION_ghc(9,2,0)
+        { backend = objTarget flags }
+#else
+        { hscTarget = objTarget flags
+        , log_action = logAction }
+#endif
+#if MIN_VERSION_ghc(9,4,0)
     target <- guessTarget name Nothing Nothing
+#else
+    target <- guessTarget name Nothing
+#endif
     oldTargets <- getTargets
     addTarget target
     getTargets >>= return . nubBy ((==) `on` targetId) >>= setTargets
@@ -166,7 +185,9 @@ doLoadModule name modName = do
                    Failed -> importedModules
                    Succeeded -> IIDecl (simpleImportDecl $ mkModuleName modName) : importedModules
     _ <- setSessionDynFlags flags
+#if MIN_VERSION_ghc(9,2,0)
     popLogHookM
+#endif
     case result of
       Succeeded -> return mempty
       Failed -> do
@@ -180,12 +201,29 @@ doReload = do
   flip gcatch (moduleUnloadHandler "reload" importedModules) $ do
     flags <- getSessionDynFlags
     errRef <- liftIO $ newIORef []
+#if MIN_VERSION_ghc(9,4,0)
     let logAction = \_lflags _msgclass _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
-    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo flags { backend = objTarget flags }
+#elif MIN_VERSION_ghc(9,0,0)
+    let logAction = \_dflags _warn _sev _srcspan msg -> modifyIORef' errRef (showSDoc flags msg :)
+#else
+    let logAction = \_dflags _sev _srcspan _ppr _style msg -> modifyIORef' errRef (showSDoc flags msg :)
+#endif
+#if MIN_VERSION_ghc(9,2,0)
     pushLogHookM (const logAction)
+#endif
+    _ <- setSessionDynFlags $ flip gopt_set Opt_BuildDynamicToo
+      flags
+#if MIN_VERSION_ghc(9,2,0)
+        { backend = objTarget flags }
+#else
+        { hscTarget = objTarget flags
+        , log_action = logAction }
+#endif
     oldTargets <- getTargets
     result <- load LoadAllTargets
+#if MIN_VERSION_ghc(9,2,0)
     popLogHookM
+#endif
     initializeItVariable
     case result of Failed -> setTargets oldTargets; Succeeded{} -> return ()
     setContext importedModules
