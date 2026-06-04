@@ -1,6 +1,8 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+#ifdef USE_HOOGLE
 
 module IHaskell.Eval.Hoogle (
     search,
@@ -272,3 +274,4 @@ removeMarkup s = T.unpack $ List.foldl (flip ($)) (T.pack s) replaceAll
                        , ( "</b>", "")
                        ]
         replaceAll = uncurry T.replace <$> replacements
+#endif
