@@ -35,7 +35,7 @@ import           System.Directory
 import           System.Posix.IO (fdToHandle)
 #endif
 import           System.IO (hGetChar, hSetEncoding, utf8)
-import           Data.Unique (newUnique)
+import           Data.Unique (newUnique, hashUnique)
 import           System.Process
 import           System.Exit
 import           System.Environment (getEnv)
@@ -98,6 +98,7 @@ import qualified GHC.Paths
 import           GHC hiding (Stmt, TypeSig)
 
 import           IHaskell.CSS (ihaskellCSS)
+import           IHaskell.Eval.Evaluate.Compat
 import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
@@ -117,91 +118,12 @@ import qualified IHaskell.Eval.Hoogle as Hoogle
 import qualified Data.Text as Text
 import           IHaskell.Eval.Evaluate.HTML (htmlify)
 
-#if MIN_VERSION_ghc(9,0,0)
-import           GHC.Data.FastString
-#else
-import           FastString (unpackFS)
-#endif
-
-#if MIN_VERSION_ghc(9,2,0)
-showSDocUnqual :: DynFlags -> SDoc -> String
-showSDocUnqual = showSDoc
-#endif
-
-#if MIN_VERSION_ghc(9,0,0)
-gcatch :: Ghc a -> (SomeException -> Ghc a) -> Ghc a
-gcatch = MC.catch
-
-gtry :: IO a -> IO (Either SomeException a)
-gtry = MC.try
-
-gfinally :: Ghc a -> Ghc b -> Ghc a
-gfinally = MC.finally
-
-ghandle :: (MonadCatch m, Exception e) => (e -> m a) -> m a -> m a
-ghandle = MC.handle
-
-throw :: SomeException -> Ghc a
-throw = MC.throwM
-#endif
-
-
--- | Set GHC's verbosity for debugging
-ghcVerbosity :: Maybe Int
-ghcVerbosity = Nothing -- Just 5
-
-ignoreTypePrefixes :: [String]
-ignoreTypePrefixes = [ "GHC.Types"
-                     , "GHC.Base"
-                     , "GHC.Show"
-                     , "System.IO"
-                     , "GHC.Float"
-                     , ":Interactive"
-                     , "GHC.Num"
-                     , "GHC.IO"
-                     , "GHC.Integer.Type"
-                     ]
-
-typeCleaner :: String -> String
-typeCleaner = useStringType . foldl' (.) id (map (`replace` "") fullPrefixes)
-  where
-    fullPrefixes = map (++ ".") ignoreTypePrefixes
-    useStringType = replace "[Char]" "String"
-
--- | Write a debug log message.  The message is only emitted when the kernel's
--- configured log level is at least 'LogDebug'.
+-- | Write a debug log message.
 writeLog :: (MonadIO m, GhcMonad m) => KernelState -> LogLevel -> String -> m ()
 writeLog state lvl msg = when (lvl <= kernelLogLevel state) $
   liftIO $ hPutStrLn stderr $ "[" ++ show lvl ++ "] " ++ msg
 
 type Interpreter = Ghc
-
-requiredGlobalImports :: [String]
-requiredGlobalImports =
-  [ "import qualified Prelude as IHaskellPrelude"
-  , "import qualified System.Directory as IHaskellDirectory"
-#ifdef mingw32_HOST_OS
-  , "import qualified System.Process as IHaskellProcess"
-#else
-  , "import qualified System.Posix.IO as IHaskellIO"
-#endif
-  , "import qualified System.IO as IHaskellSysIO"
-  , "import qualified Language.Haskell.TH as IHaskellTH"
-  ]
-
-ihaskellGlobalImports :: [String]
-ihaskellGlobalImports =
-  [ "import IHaskell.Display()"
-  , "import qualified IHaskell.Display"
-  , "import qualified IHaskell.IPython.Stdin"
-  , "import qualified IHaskell.Eval.Widgets"
-#ifdef mingw32_HOST_OS
-  , "import qualified IHaskell.Windows.IO as IHaskellIO"
-#endif
-  ]
-
-hiddenPackageNames :: Set.Set String
-hiddenPackageNames = Set.fromList ["ghc-lib", "ghc-lib-parser"]
 
 -- | Interpreting function for testing.
 testInterpret :: Interpreter a -> IO a
@@ -246,64 +168,6 @@ interpret libdir allowedStdin needsSupportLibraries action = runGhc (Just libdir
 
   -- Run the rest of the interpreter
   action hasSupportLibraries
-
-#if MIN_VERSION_ghc(9,4,0)
-packageIdString' :: UnitState -> UnitInfo -> String
-packageIdString' unitState pkg_cfg =
-    case (lookupUnit unitState $ mkUnit pkg_cfg) of
-      Nothing -> "(unknown)"
-      Just cfg -> let
-        PackageName name = unitPackageName cfg
-        in unpackFS name
-#elif MIN_VERSION_ghc(9,2,0)
-packageIdString' :: UnitState -> UnitInfo -> String
-packageIdString' unitState pkg_cfg =
-    case (lookupUnit unitState $ mkUnit pkg_cfg) of
-      Nothing -> "(unknown)"
-      Just cfg -> let
-        PackageName name = unitPackageName cfg
-        in unpackFS name
-#elif MIN_VERSION_ghc(9,0,0)
-packageIdString' :: DynFlags -> UnitInfo -> String
-packageIdString' dflags pkg_cfg =
-    case (lookupUnit (unitState dflags) $ mkUnit pkg_cfg) of
-      Nothing -> "(unknown)"
-      Just cfg -> let
-        PackageName name = unitPackageName cfg
-        in unpackFS name
-#else
-packageIdString' :: DynFlags -> PackageConfig -> String
-packageIdString' dflags pkg_cfg =
-    case (lookupPackage dflags $ packageConfigId pkg_cfg) of
-      Nothing -> "(unknown)"
-      Just cfg -> let
-        PackageName name = packageName cfg
-        in unpackFS name
-#endif
-
-#if MIN_VERSION_ghc(9,4,0)
-getPackageConfigs :: Logger -> DynFlags -> HscEnv -> IO ([GenUnitInfo UnitId], UnitState)
-getPackageConfigs logger dflags hsc_env = do
-    (pkgDb, unitState, _, _) <- initUnits logger dflags Nothing (hsc_all_home_unit_ids hsc_env)
-    pure (foldMap unitDatabaseUnits pkgDb, unitState)
-#elif MIN_VERSION_ghc(9,2,0)
-getPackageConfigs :: Logger -> DynFlags -> IO ([GenUnitInfo UnitId], UnitState)
-getPackageConfigs logger dflags = do
-    (pkgDb, unitState, _, _) <- initUnits logger dflags Nothing
-    pure (foldMap unitDatabaseUnits pkgDb, unitState)
-#elif MIN_VERSION_ghc(9,0,0)
-getPackageConfigs :: DynFlags -> [GenUnitInfo UnitId]
-getPackageConfigs dflags =
-    foldMap unitDatabaseUnits pkgDb
-  where
-    Just pkgDb = unitDatabases dflags
-#else
-getPackageConfigs :: DynFlags -> [PackageConfig]
-getPackageConfigs dflags =
-    foldMap snd pkgDb
-  where
-    Just pkgDb = pkgDatabase dflags
-#endif
 
 -- | Initialize our GHC session with imports and a value for 'it'. Return whether the IHaskell
 -- library is available.
@@ -570,19 +434,6 @@ flushWidgetMessages state evalmsgs widgetHandler = do
         let commMessages = evalmsgs ++ messages
         widgetHandler state commMessages
 
-#if MIN_VERSION_ghc(9,6,0)
-getErrMsgDoc :: ErrUtils.Diagnostic e => ErrUtils.MsgEnvelope e -> SDoc
-getErrMsgDoc = ErrUtils.pprLocMsgEnvelopeDefault
-#elif MIN_VERSION_ghc(9,4,0)
-getErrMsgDoc :: ErrUtils.Diagnostic e => ErrUtils.MsgEnvelope e -> SDoc
-getErrMsgDoc = ErrUtils.pprLocMsgEnvelope
-#elif MIN_VERSION_ghc(9,2,0)
-getErrMsgDoc :: ErrUtils.WarnMsg -> SDoc
-getErrMsgDoc = ErrUtils.pprLocMsgEnvelope
-#else
-getErrMsgDoc :: ErrUtils.ErrMsg -> SDoc
-getErrMsgDoc = ErrUtils.pprLocErrMsg
-#endif
 
 safely :: KernelState -> Interpreter EvalOut -> Interpreter EvalOut
 safely state = ghandle handler . ghandle sourceErrorHandler
@@ -664,11 +515,11 @@ evalCommand _ (Module contents) state = wrapExecution state $ do
           -- Get the dot-delimited pieces of the module name.
           moduleNameOf :: InteractiveImport -> [String]
           moduleNameOf (IIDecl decl) = split "." . moduleNameString . unLoc . ideclName $ decl
-  #if MIN_VERSION_ghc(9,14,0)
+#if MIN_VERSION_ghc(9,14,0)
           moduleNameOf (IIModule imp) = split "." . moduleNameString $ moduleName imp
-  #else
+#else
           moduleNameOf (IIModule imp) = split "." . moduleNameString $ imp
-  #endif
+#endif
 
           -- Return whether this module prevents the loading of the one we're trying to load.
           preventsLoading md =
@@ -1378,16 +1229,6 @@ doReload = do
 
       return $ displayError "Failed to reload."
 
-#if MIN_VERSION_ghc(9,2,0)
-objTarget :: DynFlags -> Backend
-objTarget = platformDefaultBackend . targetPlatform
-#elif MIN_VERSION_ghc(8,10,0)
-objTarget :: DynFlags -> HscTarget
-objTarget = defaultObjectTarget
-#else
-objTarget :: DynFlags -> HscTarget
-objTarget flags = defaultObjectTarget $ targetPlatform flags
-#endif
 
 data Captured a = CapturedStmt String
                 | CapturedIO (IO a)
@@ -1399,7 +1240,7 @@ capturedEval output stmt = do
   -- Generate a unique suffix for variable names to avoid shadowing variables
   -- from previous evaluations.  Uses `Data.Unique` from `base` instead of
   -- `System.Random` to guarantee uniqueness without any shared mutable state.
-  suffix <- show <$> liftIO newUnique
+  suffix <- show . hashUnique <$> liftIO newUnique
   let
       goStmt :: String -> Ghc ExecResult
       goStmt s = execStmt s execOptions

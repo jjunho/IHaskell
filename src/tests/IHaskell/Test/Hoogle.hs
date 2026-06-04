@@ -1,8 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE QuasiQuotes #-}
-#ifdef USE_HOOGLE
-
 module IHaskell.Test.Hoogle ( testHoogle ) where
+
+#ifdef USE_HOOGLE
 
 import           Test.Hspec
 import           Text.RawString.QQ
@@ -63,4 +63,9 @@ testHoogle = describe "Hoogle Search" $ do
     it "should be renderable" $ do
       (render Plain $ head results) `shouldStartWith` "module Universum.Functor.Fmap"
       (render HTML  $ head results) `shouldStartWith` "<span class='hoogle-head'>module</span>"
+
+#else
+import           Test.Hspec
+testHoogle :: Spec
+testHoogle = return ()
 #endif

@@ -102,8 +102,9 @@ library
                    IHaskell.Convert.LhsToIpynb
                    IHaskell.Eval.Completion
                    IHaskell.Eval.Inspect
-                   IHaskell.Eval.Evaluate
-                   IHaskell.Eval.Info
+                    IHaskell.Eval.Evaluate
+                    IHaskell.Eval.Evaluate.Compat
+                    IHaskell.Eval.Info
                     IHaskell.Eval.Parser
                     IHaskell.Eval.ParseShell
                    IHaskell.Eval.Widgets
@@ -191,6 +192,7 @@ Test-Suite hspec
         filepath,
         text,
         ihaskell,
+        binary,
         hedgehog,
         hspec,
         hspec-contrib,

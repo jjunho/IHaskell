@@ -6,13 +6,15 @@ module IHaskell.Test.Completion (testCompletions) where
 import           Prelude
 
 import           Data.List (elemIndex)
+import           Data.Maybe (fromMaybe)
 import qualified Data.Text as T
+import           Control.Monad (when)
 import           Control.Monad.IO.Class (liftIO)
 import           System.Environment (setEnv, lookupEnv)
 import           System.Directory (setCurrentDirectory, getCurrentDirectory, createDirectoryIfMissing,
                                     removeDirectoryRecursive, doesDirectoryExist)
 import           System.FilePath ((</>), addTrailingPathSeparator)
-import           Data.Unique (newUnique)
+import           Data.Unique (newUnique, hashUnique)
 import           Control.Exception (bracket)
 
 import           GHC (setContext, parseImportDecl, InteractiveImport(..))
@@ -192,7 +194,7 @@ inDirectory :: [FilePath] -- ^ directories relative to temporary directory
             -> (FilePath -> Interpreter a)
             -> IO a
 inDirectory dirs files action = do
-  u <- show <$> newUnique
+  u <- show . hashUnique <$> newUnique
   let tmpDir = "/tmp/ihaskell-test-" ++ u
   createDirectoryIfMissing True tmpDir
   bracket

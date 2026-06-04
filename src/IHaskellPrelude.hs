@@ -22,6 +22,7 @@ module IHaskellPrelude (
   System.IO.stdin,
   System.IO.getChar,
   System.IO.getLine,
+  System.IO.readFile,
   System.IO.writeFile,
   System.IO.Handle,
 

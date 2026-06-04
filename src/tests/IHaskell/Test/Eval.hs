@@ -172,8 +172,14 @@ testEval =
 
     it "evaluates :in directive" $ do
       (displays, _) <- eval ":in String"
-      case displays of
-        [ManyDisplay [Display [DisplayData PlainText plain, DisplayData MimeHtml html]]] -> do
+      -- GHC 9.12+ returns the display as a top-level Display (not wrapped in ManyDisplay).
+      -- Older GHC versions returned ManyDisplay. Accept both.
+      let extractPlainAndHtml ds = case ds of
+            [Display [DisplayData PlainText p, DisplayData MimeHtml h]] -> Just (p, h)
+            [ManyDisplay [Display [DisplayData PlainText p, DisplayData MimeHtml h]]] -> Just (p, h)
+            _ -> Nothing
+      case extractPlainAndHtml displays of
+        Just (plain, html) -> do
           -- The type definition is stable; the module name and whether quotation
           -- marks use unicode vary across GHC versions and platforms, so don't
           -- check everything.
@@ -181,7 +187,7 @@ testEval =
           Text.unpack html  `shouldContain` "<span class=\"cm-keyword\">type</span>"
           Text.unpack html  `shouldContain` "<span class=\"cm-variable-2\">String</span>"
           Text.unpack html  `shouldContain` "<span class=\"cm-variable-2\">Char</span>"
-        _ -> expectationFailure $ "Unexpected display structure for :in String: "
+        Nothing -> expectationFailure $ "Unexpected display structure for :in String: "
                                     ++ show (encode displays)
 
     it "captures stderr" $ do

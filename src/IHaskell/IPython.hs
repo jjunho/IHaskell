@@ -21,14 +21,15 @@ import           IHaskellPrelude
 import qualified System.IO as IO
 import qualified System.FilePath as FP
 import           System.Directory
-import           System.Environment (getExecutablePath, findExecutable, lookupEnv)
-import           System.Exit (exitFailure)
+import           System.Environment (getExecutablePath, lookupEnv)
+import           System.Directory (findExecutable)
+import           System.Exit (exitFailure, ExitCode(..))
 import           System.Process (readProcess, readProcessWithExitCode)
 import           System.IO (hPutStrLn)
 import           Data.Aeson (toJSON)
 import           Data.Aeson.Text (encodeToTextBuilder)
 import           Data.Text.Lazy.Builder (toLazyText)
-import           Data.Unique (newUnique)
+import           Data.Unique (newUnique, hashUnique)
 
 import qualified Paths_ihaskell as Paths
 
@@ -154,7 +155,7 @@ installKernelspec repl opts = do
     let jsonFile = kernelDir FP.</> "kernel.json"
 
     createDirectoryIfMissing True kernelDir
-    writeFile jsonFile $ LT.toStrict $ toLazyText $ encodeToTextBuilder $ toJSON kernelSpec
+    writeFile jsonFile $ T.unpack $ LT.toStrict $ toLazyText $ encodeToTextBuilder $ toJSON kernelSpec
     let files = ["kernel.js", "logo-64x64.svg"]
     forM_ files $ \file -> do
       src <- Paths.getDataFileName $ "html/" ++ file
@@ -255,7 +256,7 @@ cpRecursive src dst = do
 withTempDir :: (FilePath -> IO a) -> IO a
 withTempDir action = do
   tmpRoot <- getTemporaryDirectory
-  u <- show <$> newUnique
+  u <- show . hashUnique <$> newUnique
   let tmpDir = tmpRoot FP.</> "ihaskell-" ++ u
   createDirectory tmpDir
   bracket
