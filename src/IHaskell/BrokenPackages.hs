@@ -5,27 +5,26 @@ module IHaskell.BrokenPackages (getBrokenPackages) where
 import           IHaskellPrelude
 import qualified Data.Text as T
 
+import           System.Process (readProcessWithExitCode)
+
 import           Text.Parsec
 import           Text.Parsec.String
-
-import           Shelly
 
 data BrokenPackage = BrokenPackage String [String]
 
 instance Show BrokenPackage where
   show (BrokenPackage packageID _) = packageID
 
--- | Get a list of broken packages. This function internally shells out to `ghc-pkg`, and parses the
+-- | Get a list of broken packages. This function internally shells out to @ghc-pkg@, and parses the
 -- output in order to determine what packages are broken.
 getBrokenPackages :: IO [String]
-getBrokenPackages = shelly $ do
-  _ <- silently $ errExit False $ run "ghc-pkg" ["check"]
-  checkOut <- lastStderr
+getBrokenPackages = do
+  (_exitCode, _stdout, stderr) <- readProcessWithExitCode "ghc-pkg" ["check"] ""
 
   -- Get rid of extraneous things
   let rightStart str = "There are problems" `isPrefixOf` str ||
                        "  dependency" `isPrefixOf` str
-      ghcPkgOutput = unlines . filter rightStart . lines $ T.unpack checkOut
+      ghcPkgOutput = unlines . filter rightStart . lines $ stderr
 
   return $
     case parse (many check) "ghc-pkg output" ghcPkgOutput of

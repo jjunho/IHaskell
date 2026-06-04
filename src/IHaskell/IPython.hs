@@ -1,7 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude, DoAndIfThenElse, OverloadedStrings, ExtendedDefaultRules #-}
 
--- | Description : Shell scripting wrapper using @Shelly@ for the @notebook@, and
---                 @console@ commands.
+-- | Description : Shell scripting wrapper for the @notebook@ and @console@
+--                 commands.  Uses standard @base@ libraries (@System.Directory@,
+--                 @System.Process@, @System.Environment@) instead of @Shelly@.
 module IHaskell.IPython (
     replaceIPythonKernelspec,
     defaultConfFile,
@@ -17,21 +18,24 @@ import qualified Data.Text as T
 import qualified Data.Text.Lazy as LT
 import           IHaskellPrelude
 
-import qualified Shelly as SH
 import qualified System.IO as IO
 import qualified System.FilePath as FP
 import           System.Directory
-import           System.Environment (getExecutablePath)
+import           System.Environment (getExecutablePath, findExecutable, lookupEnv)
 import           System.Exit (exitFailure)
+import           System.Process (readProcess, readProcessWithExitCode)
+import           System.IO (hPutStrLn)
 import           Data.Aeson (toJSON)
 import           Data.Aeson.Text (encodeToTextBuilder)
 import           Data.Text.Lazy.Builder (toLazyText)
+import           Data.Unique (newUnique)
 
 import qualified Paths_ihaskell as Paths
 
 import qualified GHC.Paths
 import           IHaskell.Types
 
+import           Control.Exception (bracket)
 import           StringUtils (replace, split)
 
 data KernelSpecOptions =
@@ -69,75 +73,49 @@ defaultKernelSpecOptions = KernelSpecOptions
   , kernelSpecDisplayName = "Haskell"
   }
 
-ipythonCommand :: SH.Sh SH.FilePath
-ipythonCommand = do
-  jupyterMay <- SH.which "jupyter"
-  return $
-    case jupyterMay of
-      Nothing -> "ipython"
-      Just _  -> "jupyter"
-
-locateIPython :: SH.Sh SH.FilePath
-locateIPython = do
-  mbinary <- SH.which "jupyter"
-  case mbinary of
-    Nothing      -> SH.errorExit "The Jupyter binary could not be located"
-    Just ipython -> return ipython
-
-fp :: SH.FilePath -> FilePath
-fp = T.unpack . SH.toTextIgnore
+-- | Verify that a proper version of IPython is installed and accessible.
+verifyIPythonVersion :: IO ()
+verifyIPythonVersion = do
+  jupyterMay <- findExecutable "jupyter"
+  case jupyterMay of
+    Nothing -> do
+      hPutStrLn IO.stderr "No Jupyter / IPython detected -- install Jupyter 3.0+ before using IHaskell."
+      exitFailure
+    Just _ -> pure ()
 
 -- | Create the directory and return it.
-ensure :: SH.Sh SH.FilePath -> SH.Sh SH.FilePath
-ensure getDir = do
-  dir <- getDir
-  SH.mkdir_p dir
+ensure :: FilePath -> IO FilePath
+ensure dir = do
+  createDirectoryIfMissing True dir
   return dir
 
 -- | Return the data directory for IHaskell.
-ihaskellDir :: SH.Sh FilePath
+ihaskellDir :: IO FilePath
 ihaskellDir = do
-  home <- maybe (error "$HOME not defined.") SH.fromText <$> SH.get_env "HOME"
-  fp <$> ensure (return (home SH.</> (".ihaskell" :: SH.FilePath)))
+  home <- maybe (error "$HOME not defined.") id <$> lookupEnv "HOME"
+  ensure (home FP.</> ".ihaskell")
 
 getIHaskellDir :: IO String
-getIHaskellDir = SH.shelly ihaskellDir
+getIHaskellDir = ihaskellDir
 
 defaultConfFile :: IO (Maybe String)
-defaultConfFile = fmap (fmap fp) . SH.shelly $ do
-  filename <- (SH.</> ("rc.hs" :: SH.FilePath)) <$> ihaskellDir
-  exists <- SH.test_f filename
-  return $ if exists
-             then Just filename
-             else Nothing
+defaultConfFile = do
+  dir <- ihaskellDir
+  let filename = dir FP.</> "rc.hs"
+  exists <- doesFileExist filename
+  return $ if exists then Just filename else Nothing
 
 replaceIPythonKernelspec :: KernelSpecOptions -> IO ()
-replaceIPythonKernelspec kernelSpecOpts = SH.shelly $ do
+replaceIPythonKernelspec kernelSpecOpts = do
   verifyIPythonVersion
   installKernelspec True kernelSpecOpts
 
--- | Verify that a proper version of IPython is installed and accessible.
-verifyIPythonVersion :: SH.Sh ()
-verifyIPythonVersion = do
-  cmd <- ipythonCommand
-  pathMay <- SH.which cmd
-  case pathMay of
-    Nothing -> badIPython
-                 "No Jupyter / IPython detected -- install Jupyter 3.0+ before using IHaskell."
-    Just _ -> pure ()
-
-  where
-    badIPython :: Text -> SH.Sh ()
-    badIPython message = liftIO $ do
-      IO.hPutStrLn IO.stderr (T.unpack message)
-      exitFailure
-
 -- | Install an IHaskell kernelspec into the right location. The right location is determined by
 -- using `ipython kernelspec install --user`.
-installKernelspec :: Bool -> KernelSpecOptions -> SH.Sh ()
-installKernelspec repl opts = void $ do
+installKernelspec :: Bool -> KernelSpecOptions -> IO ()
+installKernelspec repl opts = do
   ihaskellPath <- getIHaskellPath
-  confFile <- liftIO $ kernelSpecConfFile opts
+  confFile <- kernelSpecConfFile opts
 
   let kernelName = kernelSpecKernelName opts
 
@@ -162,62 +140,64 @@ installKernelspec repl opts = void $ do
 
   -- Create a temporary directory. Use this temporary directory to make a kernelspec directory; then,
   -- shell out to IPython to install this kernelspec directory.
-  SH.withTmpDir $ \tmp -> do
-    let kernelDir = tmp SH.</> kernelName
-    let filename = kernelDir SH.</> ("kernel.json" :: SH.FilePath)
+  withTempDir $ \tmp -> do
+    let kernelDir = tmp FP.</> kernelName
+    let jsonFile = kernelDir FP.</> "kernel.json"
 
-    SH.mkdir_p kernelDir
-    SH.writefile filename $ LT.toStrict $ toLazyText $ encodeToTextBuilder $ toJSON kernelSpec
+    createDirectoryIfMissing True kernelDir
+    writeFile jsonFile $ LT.toStrict $ toLazyText $ encodeToTextBuilder $ toJSON kernelSpec
     let files = ["kernel.js", "logo-64x64.svg"]
     forM_ files $ \file -> do
-      src <- liftIO $ Paths.getDataFileName $ "html/" ++ file
-      SH.cp (SH.fromText $ T.pack src) (tmp SH.</> kernelName SH.</> file)
+      src <- Paths.getDataFileName $ "html/" ++ file
+      copyFile src (kernelDir FP.</> file)
 
-    ipython <- locateIPython
+    let replaceFlag = if repl then ["--replace"] else []
+        installPrefixFlag = maybe ["--user"] (\prefix -> ["--prefix", prefix]) (kernelSpecInstallPrefix opts)
+        cmd = concat [["kernelspec", "install"], installPrefixFlag, [kernelDir], replaceFlag]
 
-    let replaceFlag = ["--replace" | repl]
-        installPrefixFlag = maybe ["--user"] (\prefix -> ["--prefix", T.pack prefix]) (kernelSpecInstallPrefix opts)
-        cmd = concat [["kernelspec", "install"], installPrefixFlag, [SH.toTextIgnore kernelDir], replaceFlag]
-
-    let transformOutput = if kernelSpecDebug opts then id else SH.silently
-    transformOutput $ SH.run ipython cmd
+    let runFn = if kernelSpecDebug opts then id else (\_ -> return ())
+    (exitCode, stdout, stderr) <- readProcessWithExitCode "jupyter" cmd ""
+    runFn $ stdout ++ stderr
+    case exitCode of
+      ExitSuccess -> return ()
+      ExitFailure _ -> hPutStrLn IO.stderr $ "jupyter kernelspec install failed: " ++ stderr
 
 installLabextension :: Bool -> IO ()
-installLabextension debug = SH.shelly $ do
+installLabextension debug = do
   -- Find the prebuilt extension directory
-  ihaskellDataDir <- liftIO Paths.getDataDir
+  ihaskellDataDir <- Paths.getDataDir
   let labextensionDataDir = ihaskellDataDir
-        SH.</> ("jupyterlab-ihaskell" :: SH.FilePath)
-        SH.</> ("labextension" :: SH.FilePath)
+        FP.</> "jupyterlab-ihaskell"
+        FP.</> "labextension"
 
   -- Find the $(jupyter --data-dir)/labextensions/jupyterlab-ihaskell directory
-  jupyter <- locateIPython
-  jupyterDataDir <- SH.silently $ SH.fromText . T.strip <$> SH.run jupyter ["--data-dir"]
-  let jupyterlabIHaskellDir = jupyterDataDir
-        SH.</> ("labextensions" :: SH.FilePath)
-        SH.</> ("jupyterlab-ihaskell" :: SH.FilePath)
+  jupyterDataDir <- T.strip . T.pack <$> readProcess "jupyter" ["--data-dir"] ""
+  let jupyterlabIHaskellDir = T.unpack jupyterDataDir
+        FP.</> "labextensions"
+        FP.</> "jupyterlab-ihaskell"
 
   when debug (putStrLn $ "Installing kernel in folder: " ++ show jupyterlabIHaskellDir)
   -- Remove the extension directory with extreme prejudice if it already exists
-  SH.rm_rf jupyterlabIHaskellDir
+  dirExists <- doesDirectoryExist jupyterlabIHaskellDir
+  when dirExists $ removeDirectoryRecursive jupyterlabIHaskellDir
   -- Create an empty 'jupyterlab-ihaskell' directory to install our extension in
-  SH.mkdir_p jupyterlabIHaskellDir
+  createDirectoryIfMissing True jupyterlabIHaskellDir
   -- Copy the prebuilt extension files over
-  extensionContents <- SH.ls labextensionDataDir
+  extensionContents <- listDirectory labextensionDataDir
   forM_ extensionContents $ \entry ->
-    SH.cp_r entry jupyterlabIHaskellDir
+    cpRecursive (labextensionDataDir FP.</> entry) (jupyterlabIHaskellDir FP.</> entry)
 
 -- | Replace "~" with $HOME if $HOME is defined. Otherwise, do nothing.
 subHome :: String -> IO String
-subHome path = SH.shelly $ do
-  home <- T.unpack <$> fromMaybe "~" <$> SH.get_env "HOME"
+subHome path = do
+  home <- fromMaybe "~" <$> lookupEnv "HOME"
   return $ replace "~" home path
 
 -- | Get the absolute path to this IHaskell executable.
-getIHaskellPath :: SH.Sh FilePath
+getIHaskellPath :: IO FilePath
 getIHaskellPath = do
-  --  Get the absolute filepath to the argument.
-  f <- liftIO getExecutablePath
+  -- Get the absolute filepath to the argument.
+  f <- getExecutablePath
 
   -- If we have an absolute path, that's the IHaskell we're interested in.
   if FP.isAbsolute f
@@ -227,13 +207,14 @@ getIHaskellPath = do
     -- the shell. If it's just 'IHaskell', use the $PATH variable to find where IHaskell lives.
     if FP.takeFileName f == f
       then do
-        ihaskellPath <- SH.which "ihaskell"
+        ihaskellPath <- findExecutable "ihaskell"
         case ihaskellPath of
           Nothing   -> error "ihaskell not on $PATH and not referenced relative to directory."
-          Just path -> return $ T.unpack $ SH.toTextIgnore path
-      else liftIO $ makeAbsolute f
+          Just path -> return path
+      else makeAbsolute f
+
 getSandboxPackageConf :: IO (Maybe String)
-getSandboxPackageConf = SH.shelly $ do
+getSandboxPackageConf = do
   myPath <- getIHaskellPath
   let sandboxName = ".cabal-sandbox"
   if not $ sandboxName `isInfixOf` myPath
@@ -241,9 +222,32 @@ getSandboxPackageConf = SH.shelly $ do
     else do
       let pieces = split "/" myPath
           sandboxDir = intercalate "/" $ takeWhile (/= sandboxName) pieces ++ [sandboxName]
-      subdirs <- map fp <$> SH.ls (SH.fromText $ T.pack sandboxDir)
-      let confdirs = filter (isSuffixOf ("packages.conf.d" :: String)) subdirs
-      case confdirs of
+      subdirs <- filter (isSuffixOf ("packages.conf.d" :: String)) <$> listDirectory sandboxDir
+      case subdirs of
         [] -> return Nothing
-        dir:_ ->
-          return $ Just dir
+        dir:_ -> return $ Just dir
+
+-- | Copy a file or directory recursively (replaces @shelly@'s @cp_r@).
+cpRecursive :: FilePath -> FilePath -> IO ()
+cpRecursive src dst = do
+  isDir <- doesDirectoryExist src
+  if isDir
+    then do
+      createDirectoryIfMissing True dst
+      entries <- listDirectory src
+      forM_ entries $ \entry ->
+        cpRecursive (src FP.</> entry) (dst FP.</> entry)
+    else copyFile src dst
+
+-- | Create a temporary directory with a unique name and run an action with it.
+-- The directory is removed after the action completes (or on exception).
+-- Uses 'bracket' for exception safety, so no temp directories leak.
+withTempDir :: (FilePath -> IO a) -> IO a
+withTempDir action = do
+  u <- show <$> newUnique
+  let tmpDir = "/tmp/ihaskell-" ++ u
+  createDirectory tmpDir
+  bracket
+    (return tmpDir)
+    (\d -> doesDirectoryExist d >>= flip when (removeDirectoryRecursive d))
+    action
