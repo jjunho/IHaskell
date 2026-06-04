@@ -118,13 +118,6 @@ import qualified IHaskell.Eval.Hoogle as Hoogle
 import qualified Data.Text as Text
 import           IHaskell.Eval.Evaluate.HTML (htmlify)
 
--- | Write a debug log message.
-writeLog :: (MonadIO m, GhcMonad m) => KernelState -> LogLevel -> String -> m ()
-writeLog state lvl msg = when (lvl <= kernelLogLevel state) $
-  liftIO $ hPutStrLn stderr $ "[" ++ show lvl ++ "] " ++ msg
-
-type Interpreter = Ghc
-
 -- | Interpreting function for testing.
 testInterpret :: Interpreter a -> IO a
 testInterpret v = interpret GHC.Paths.libdir False False (const v)
@@ -259,11 +252,6 @@ initializeItVariable =
   -- This is required due to the way we handle `it` in the wrapper statements - if it doesn't exist,
   -- the first statement will fail.
   void $ execStmt "let it = ()" execOptions
-
--- | Publisher for IHaskell outputs. The first argument indicates whether this output is final
--- (true) or intermediate (false). The second argument indicates whether the evaluation
--- completed successfully (Success) or an error occurred (Failure).
-type Publisher = (EvaluationResult -> ErrorOccurred -> IO ())
 
 -- | Output of a command evaluation.
 data EvalOut =

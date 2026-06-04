@@ -20,6 +20,9 @@ module IHaskell.Eval.Evaluate.Compat (
     ihaskellGlobalImports,
     ignoreTypePrefixes,
     typeCleaner,
+    writeLog,
+    Interpreter,
+    Publisher,
     ) where
 
 import           IHaskellPrelude
@@ -27,6 +30,7 @@ import           IHaskellPrelude
 import           Data.Foldable (foldMap)
 import qualified Data.Set as Set
 import           Data.Char as Char
+import           System.IO (hPutStrLn, stderr)
 
 -- GHC API imports — version-gated
 #if MIN_VERSION_ghc(9,4,0)
@@ -93,6 +97,9 @@ import           FastString (unpackFS)
 #endif
 
 import           StringUtils (replace)
+
+import           IHaskell.Types (LogLevel(..), kernelLogLevel, KernelState, EvaluationResult, ErrorOccurred)
+import           GHC (Ghc, GhcMonad)
 
 #if MIN_VERSION_ghc(9,2,0)
 showSDocUnqual :: DynFlags -> SDoc -> String
@@ -247,3 +254,17 @@ objTarget = defaultObjectTarget
 objTarget :: DynFlags -> HscTarget
 objTarget flags = defaultObjectTarget $ targetPlatform flags
 #endif
+
+-- | Type alias for the GHC interpreter monad.
+type Interpreter = Ghc
+
+-- | Publisher for IHaskell outputs. The first argument indicates whether this
+-- output is final (true) or intermediate (false). The second argument indicates
+-- whether the evaluation completed successfully (Success) or an error occurred
+-- (Failure).
+type Publisher = (EvaluationResult -> ErrorOccurred -> IO ())
+
+-- | Write a debug log message at the given log level.
+writeLog :: (MonadIO m, GhcMonad m) => KernelState -> LogLevel -> String -> m ()
+writeLog state lvl msg = when (lvl <= kernelLogLevel state) $
+  liftIO $ hPutStrLn stderr $ "[" ++ show lvl ++ "] " ++ msg
