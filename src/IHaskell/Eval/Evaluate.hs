@@ -35,7 +35,7 @@ import           System.Directory
 import           System.Posix.IO (fdToHandle)
 #endif
 import           System.IO (hGetChar, hSetEncoding, utf8)
-import           System.Random (getStdGen, randomRs)
+import           Data.Unique (newUnique)
 import           System.Process
 import           System.Exit
 import           System.Environment (getEnv)
@@ -1375,9 +1375,10 @@ capturedEval :: (String -> IO ()) -- ^ Function used to publish intermediate out
              -> Captured a -- ^ Statement to evaluate.
              -> Interpreter (String, ExecResult) -- ^ Return the output and result.
 capturedEval output stmt = do
-  -- Generate random variable names to use so that we cannot accidentally override the variables by
-  -- using the right names in the terminal.
-  gen <- liftIO getStdGen
+  -- Generate a unique suffix for variable names to avoid shadowing variables
+  -- from previous evaluations.  Uses `Data.Unique` from `base` instead of
+  -- `System.Random` to guarantee uniqueness without any shared mutable state.
+  suffix <- show <$> liftIO newUnique
   let
       goStmt :: String -> Ghc ExecResult
       goStmt s = execStmt s execOptions
@@ -1390,9 +1391,9 @@ capturedEval output stmt = do
             NoException    -> ExecComplete (Right []) 0
             AnyException e -> ExecComplete (Left e)   0
 
-      -- Variable names generation.
-      rand = take 20 $ randomRs ('0', '9') gen
-      var name = name ++ rand
+      -- Variable names generation: use the unique suffix so that each invocation
+      -- gets fresh, non-colliding variables.
+      var name = name ++ suffix
 
       -- Variables for the pipe input and outputs.
       readVariable = var "file_read_var_"
