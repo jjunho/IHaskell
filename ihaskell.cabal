@@ -105,6 +105,7 @@ library
                     IHaskell.Eval.Evaluate
                     IHaskell.Eval.Evaluate.Compat
                     IHaskell.Eval.Evaluate.Format
+                    IHaskell.Eval.Evaluate.Capture
                     IHaskell.Eval.Evaluate.Commands
                     IHaskell.Eval.Info
                     IHaskell.Eval.Parser
