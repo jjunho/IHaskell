@@ -99,6 +99,7 @@ import           GHC hiding (Stmt, TypeSig)
 
 import           IHaskell.CSS (ihaskellCSS)
 import           IHaskell.Eval.Evaluate.Compat
+import           IHaskell.Eval.Evaluate.Format
 import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
@@ -1445,58 +1446,16 @@ evalStatementOrIO publish state cmd = do
     ExecComplete (Left exception) _ -> throw exception
     ExecBreak{} -> return $ displayError "Unexpected breakpoint encountered"
 
--- Read from a file handle until we hit a delimiter or until we've read as many characters as
--- requested
 readChars :: Handle -> String -> Int -> IO String
 readChars _handle _delims 0 =
-  -- If we're done reading, return nothing.
   return []
 readChars hdl delims nchars = do
-  -- Try reading a single character. It will throw an exception if the handle is already closed.
   tryRead <- gtry $ hGetChar hdl :: IO (Either SomeException Char)
   case tryRead of
     Right ch ->
-      -- If this is a delimiter, stop reading.
       if ch `elem` delims
         then return [ch]
         else do
           next <- readChars hdl delims (nchars - 1)
           return $ ch : next
-    -- An error occurs at the end of the stream, so just stop reading.
     Left _ -> return []
-
-formatError :: ErrMsg -> String
-formatError = formatErrorWithClass "err-msg"
-
-formatErrorWithClass :: String -> ErrMsg -> String
-formatErrorWithClass cls =
-  printf "<span class='%s'>%s</span>" cls .
-  replace "\n" "<br/>" .
-  fixDollarSigns .
-  replace "<" "&lt;" .
-  replace ">" "&gt;" .
-  replace "&" "&amp;" .
-  replace useDashV "" .
-  replace "Ghci" "IHaskell" .
-  replace "‘interactive:" "‘" .
-  rstrip .
-  typeCleaner
-  where
-    fixDollarSigns = replace "$" "<span>&dollar;</span>"
-    useDashV = "\n    Use -v to see a list of the files searched for."
-
-formatParseError :: StringLoc -> String -> ErrMsg
-formatParseError (Loc ln col) =
-  printf "Parse error (line %d, column %d): %s" ln col
-
-formatGetType :: String -> String
-formatGetType = printf "<span class='get-type'>%s</span>"
-
-formatType :: String -> Display
-formatType typeStr = Display [plain typeStr, html' (Just ihaskellCSS) $ formatGetType typeStr]
-
-displayError :: ErrMsg -> Display
-displayError msg = Display [plain . typeCleaner $ msg, html' (Just ihaskellCSS) $ formatError msg]
-
-mono :: String -> String
-mono = printf "<span class='mono'>%s</span>"

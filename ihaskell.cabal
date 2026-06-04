@@ -104,6 +104,7 @@ library
                    IHaskell.Eval.Inspect
                     IHaskell.Eval.Evaluate
                     IHaskell.Eval.Evaluate.Compat
+                    IHaskell.Eval.Evaluate.Format
                     IHaskell.Eval.Info
                     IHaskell.Eval.Parser
                     IHaskell.Eval.ParseShell
