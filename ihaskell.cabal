@@ -1,12 +1,6 @@
--- The name of the package.
-name:                ihaskell
+cabal-version:       3.4
 
--- The package version.  See the Haskell package versioning policy (PVP)
--- for standards guiding when and how versions should be incremented.
--- http://www.haskell.org/haskellwiki/Package_versioning_policy
--- PVP summary:      +--+------- breaking API changes
---                   |  | +----- non-breaking API additions
---                   |  | | +--- code changes with no API change
+name:                ihaskell
 version:             0.13.0.0
 
 -- A short (one-line) description of the package.
@@ -39,9 +33,6 @@ category:            Development
 
 build-type:          Simple
 
--- Constraint on the version of Cabal needed to build this package.
-cabal-version:       1.16
-
 data-files:
     html/kernel.js
     html/logo-64x64.svg
@@ -53,13 +44,21 @@ flag use-hlint
   default:     True
   manual:      True
 
+-- Shared warning options for all components.
+common warnings
+  ghc-options: -Wall
+  if impl (ghc >= 8.4)
+    ghc-options: -Wpartial-fields
+
+-- Shared default language for all components.
+common lang
+  default-language: Haskell2010
+
 library
-  hs-source-dirs:      src
-  default-language:    Haskell2010
-  ghc-options:         -Wall
+  import:           warnings, lang
+  hs-source-dirs:   src
 
   if impl (ghc >= 8.4)
-    ghc-options:       -Wpartial-fields
     build-depends:     ghc-syntax-highlighter
     exposed-modules:   IHaskell.Eval.Evaluate.HTML
 
@@ -76,7 +75,6 @@ library
                        haskeline             ,
                        parsec                ,
                        process               ,
-                       random                ,
                        stm                   ,
                        text                  ,
                        time                  ,
@@ -91,9 +89,9 @@ library
                        shelly                >=1.5,
                        split                 >=0.2,
                        strict                >=0.3,
-                       unordered-containers  -any,
-                       utf8-string           -any,
-                       vector                -any,
+                       unordered-containers  ,
+                       utf8-string           ,
+                       vector                ,
                        ipython-kernel        >=0.12.0.0
 
   exposed-modules: IHaskell.Display
@@ -122,7 +120,6 @@ library
   other-modules:
                    StringUtils
 
-
   if flag(use-hlint)
     exposed-modules: IHaskell.Eval.Lint
     build-depends: hlint >=1.9
@@ -138,21 +135,16 @@ library
     build-depends: unix
 
 executable ihaskell
-  -- .hs or .lhs file containing the Main module.
-  main-is:             Main.hs
-  hs-source-dirs: main
+  import:           warnings, lang
+  main-is:          Main.hs
+  hs-source-dirs:   main
   other-modules:
                    Paths_ihaskell
-  ghc-options: -threaded -rtsopts -Wall
+  ghc-options:     -threaded -rtsopts
 
   if os(darwin)
     ghc-options: -optP-Wno-nonportable-include-path
 
-  if impl (ghc >= 8.4)
-    ghc-options:       -Wpartial-fields
-
-  -- Other library packages from which modules are imported.
-  default-language:    Haskell2010
   build-depends:
                        base                 ,
                        bytestring           ,
@@ -165,28 +157,22 @@ executable ihaskell
                        aeson                ,
                        ihaskell             ,
                        ipython-kernel       ,
-                       strict               ,
                        unordered-containers
 
   if !os(windows)
     build-depends: unix
 
 Test-Suite hspec
-    Type: exitcode-stdio-1.0
-    Ghc-Options: -threaded -Wall
-
-    if impl (ghc >= 8.4)
-      ghc-options:     -Wpartial-fields
-
-    Main-Is: Hspec.hs
-    hs-source-dirs: src/tests
+    import:           warnings, lang
+    Type:             exitcode-stdio-1.0
+    Main-Is:          Hspec.hs
+    hs-source-dirs:   src/tests
     other-modules:
         IHaskell.Test.Eval
         IHaskell.Test.Completion
         IHaskell.Test.Util
         IHaskell.Test.Parser
         IHaskell.Test.Hoogle
-    default-language: Haskell2010
     build-depends:
         aeson,
         base,
@@ -206,4 +192,4 @@ Test-Suite hspec
 
 source-repository head
   type:     git
-  location: git://github.com/gibiansky/IHaskell.git
+  location: https://github.com/gibiansky/IHaskell.git
