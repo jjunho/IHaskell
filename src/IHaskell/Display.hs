@@ -50,9 +50,14 @@ module IHaskell.Display (
     base64,
 
     -- * Internal only use
-    displayFromChanEncoded,
+    displayFromChan,
     serializeDisplay,
     Widget(..),
+
+    -- ** Channel management (for kernel use)
+    getDisplayChan,
+    setDisplayChan,
+    resetDisplayChan,
     ) where
 
 import           IHaskellPrelude
@@ -65,6 +70,7 @@ import qualified Data.ByteString.Base64 as Base64
 
 import           Control.Concurrent.STM (atomically)
 import           Control.Concurrent.STM.TChan
+import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
 import           System.IO.Unsafe (unsafePerformIO)
 
 import qualified Data.Text.Encoding as E
@@ -172,17 +178,36 @@ serializeDisplay = Binary.encode
 
 -- | Items written to this chan will be included in the output sent to the frontend (ultimately the
 -- browser), the next time IHaskell has an item to display.
-{-# NOINLINE displayChan #-}
-displayChan :: TChan Display
-displayChan = unsafePerformIO newTChanIO
+--
+-- The channel is stored in an 'IORef' so that the kernel can replace it for
+-- testing or re-initialization without relying on 'unsafePerformIO' semantics.
+{-# NOINLINE displayChanRef #-}
+displayChanRef :: IORef (TChan Display)
+displayChanRef = unsafePerformIO $ newIORef =<< newTChanIO
 
--- | Take everything that was put into the 'displayChan' at that point out, and make a 'Display' out
--- of it.
-displayFromChanEncoded :: IO LBS.ByteString
-displayFromChanEncoded =
-  Binary.encode <$> Just . many <$> unfoldM (atomically $ tryReadTChan displayChan)
+-- | Get the current display channel.
+getDisplayChan :: IO (TChan Display)
+getDisplayChan = readIORef displayChanRef
+
+-- | Replace the display channel (for testing or kernel re-initialization).
+setDisplayChan :: TChan Display -> IO ()
+setDisplayChan = atomicWriteIORef displayChanRef
+
+-- | Create a fresh display channel and use it (for kernel re-initialization).
+resetDisplayChan :: IO ()
+resetDisplayChan =
+  newTChanIO >>= atomicWriteIORef displayChanRef
+
+-- | Take everything that was put into the display channel at that point out,
+-- and return the accumulated 'Display'.
+displayFromChan :: IO Display
+displayFromChan = do
+  chan <- readIORef displayChanRef
+  many <$> unfoldM (atomically $ tryReadTChan chan)
 
 -- | Write to the display channel. The contents will be displayed in the notebook once the current
 -- execution call ends.
 printDisplay :: IHaskellDisplay a => a -> IO ()
-printDisplay disp = display disp >>= atomically . writeTChan displayChan
+printDisplay disp = do
+  chan <- readIORef displayChanRef
+  display disp >>= atomically . writeTChan chan

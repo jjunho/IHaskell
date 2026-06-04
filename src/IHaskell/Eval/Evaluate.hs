@@ -110,6 +110,7 @@ import           IHaskell.Types
 import           IHaskell.IPython
 import           IHaskell.Eval.Parser
 import           IHaskell.Display
+import           IHaskell.Eval.Widgets (relayWidgetMessages)
 import           IHaskell.Eval.Util
 import           IHaskell.BrokenPackages
 import           StringUtils (replace, split, strip, rstrip)
@@ -319,25 +320,8 @@ evaluate kernelState code output widgetHandler = do
       evalOut <- evalCommand output cmd state
 
       -- Get displayed channel outputs. Merge them with normal display outputs.
-      dispsMay <- if supportLibrariesAvailable state
-                    then do
-                      getEncodedDisplays <- extractValue "IHaskell.Display.displayFromChanEncoded"
-                      case getEncodedDisplays of
-                        Left err -> do
-                          writeLog state LogWarn $ "Deserialization error (Evaluate.hs): " ++ err
-                          return Nothing
-                        Right displaysIO -> do
-                          result <- liftIO displaysIO
-                          case Binary.decodeOrFail result of
-                            Left (_, _, err) -> do
-                              writeLog state LogWarn $ "Deserialization error (Evaluate.hs): " ++ err
-                              return Nothing
-                            Right (_, _, res) -> return (Just res)
-                    else return Nothing
-      let result =
-            case dispsMay of
-              Nothing    -> evalResult evalOut
-              Just disps -> evalResult evalOut <> disps
+      disps <- liftIO $ displayFromChan
+      let result = evalResult evalOut <> disps
 
       -- Output things only if they are non-empty.
       unless (noResults result && null (evalPager evalOut)) $
@@ -349,9 +333,7 @@ evaluate kernelState code output widgetHandler = do
           tempState = evalState evalOut { evalMsgs = [] }
 
       -- Handle the widget messages
-      newState <- if supportLibrariesAvailable state
-                    then flushWidgetMessages tempState tempMsgs widgetHandler
-                    else return tempState
+      newState <- flushWidgetMessages tempState tempMsgs widgetHandler
 
       case evalStatus evalOut of
         Success -> runUntilFailure newState rest
@@ -359,58 +341,14 @@ evaluate kernelState code output widgetHandler = do
 
     storeItCommand execCount = Statement $ printf "let it%d = it" execCount
 
--- | Compile a string and extract a value from it. Effectively extract the result of an expression
--- from inside the notebook environment.
-extractValue :: Typeable a => String -> Interpreter (Either String a)
-extractValue expr = do
-#if MIN_VERSION_ghc(9,0,0)
-  compiled <- gcatch (Right <$> dynCompileExpr expr) (\exc -> return (Left (show exc)))
-  case compiled of
-    Left exc -> return (Left exc)
-    Right dyn -> case fromDynamic dyn of
-      Nothing     -> return (Left multipleIHaskells)
-      Just result -> return (Right result)
-#else
-  compiled <- dynCompileExpr expr
-  case fromDynamic compiled of
-    Nothing     -> return (Left multipleIHaskells)
-    Just result -> return (Right result)
-#endif
-
-  where
-    multipleIHaskells =
-      concat
-        [ "The installed IHaskell support libraries do not match"
-        , " the instance of IHaskell you are running.\n"
-        , "This *may* cause problems with functioning of widgets or rich media displays.\n"
-        , "This is most often caused by multiple copies of IHaskell"
-        , " being installed simultaneously in your environment.\n"
-        , "To resolve this issue, clear out your environment and reinstall IHaskell.\n"
-        , "If you are installing support libraries, make sure you only do so once:\n"
-        , "    # Run this without first running `stack install ihaskell`\n"
-        , "    stack install ihaskell-diagrams\n"
-        , "If you continue to have problems, please file an issue on Github."
-        ]
-
 flushWidgetMessages :: KernelState
                     -> [WidgetMsg]
                     -> (KernelState -> [WidgetMsg] -> IO KernelState)
                     -> Interpreter KernelState
 flushWidgetMessages state evalmsgs widgetHandler = do
-  -- Capture all widget messages queued during code execution
-  extracted <- extractValue "IHaskell.Eval.Widgets.relayWidgetMessages"
-  liftIO $
-    case extracted of
-      Left err -> do
-        hPutStrLn stderr "Disabling IHaskell widget support due to an encountered error:"
-        hPutStrLn stderr err
-        return state
-      Right messagesIO -> do
-        messages <- messagesIO
-
-        -- Handle all the widget messages
-        let commMessages = evalmsgs ++ messages
-        widgetHandler state commMessages
+  messages <- liftIO $ relayWidgetMessages
+  let commMessages = evalmsgs ++ messages
+  liftIO $ widgetHandler state commMessages
 
 -- | Return the display data for this command, as well as whether it resulted in an error.
 evalCommand :: Publisher -> CodeBlock -> KernelState -> Interpreter EvalOut

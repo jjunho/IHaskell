@@ -10,6 +10,9 @@ module IHaskell.Eval.Widgets (
     widgetClearOutput,
     relayWidgetMessages,
     widgetHandler,
+    getWidgetChan,
+    setWidgetChan,
+    resetWidgetChan,
     ) where
 
 import           IHaskellPrelude
@@ -20,6 +23,7 @@ import           Data.Aeson
 import           Data.ByteString.Base64 as B64 (decodeLenient)
 import qualified Data.Map as Map
 import           Data.Text.Encoding (encodeUtf8)
+import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
 
 import           Data.Foldable (foldl)
 import           System.IO.Unsafe (unsafePerformIO)
@@ -37,13 +41,24 @@ import qualified Data.HashMap.Strict as HM (lookup,insert,delete)
 #endif
 
 -- All comm_open messages go here
-widgetMessages :: TChan WidgetMsg
-{-# NOINLINE widgetMessages #-}
-widgetMessages = unsafePerformIO newTChanIO
+widgetChanRef :: IORef (TChan WidgetMsg)
+{-# NOINLINE widgetChanRef #-}
+widgetChanRef = unsafePerformIO $ newIORef =<< newTChanIO
 
--- | Return all pending comm_close messages
+getWidgetChan :: IO (TChan WidgetMsg)
+getWidgetChan = readIORef widgetChanRef
+
+setWidgetChan :: TChan WidgetMsg -> IO ()
+setWidgetChan = atomicWriteIORef widgetChanRef
+
+resetWidgetChan :: IO ()
+resetWidgetChan = newTChanIO >>= atomicWriteIORef widgetChanRef
+
+-- | Return all pending widget messages
 relayWidgetMessages :: IO [WidgetMsg]
-relayWidgetMessages = relayMessages widgetMessages
+relayWidgetMessages = do
+  chan <- readIORef widgetChanRef
+  relayMessages chan
 
 -- | Extract all messages from a TChan and wrap them in a list
 relayMessages :: TChan a -> IO [a]
@@ -51,7 +66,9 @@ relayMessages = unfoldM . atomically . tryReadTChan
 
 -- | Write a widget message to the chan
 queue :: WidgetMsg -> IO ()
-queue = atomically . writeTChan widgetMessages
+queue msg = do
+  chan <- readIORef widgetChanRef
+  atomically $ writeTChan chan msg
 
 -- | Send a message
 widgetSend :: IHaskellWidget a
