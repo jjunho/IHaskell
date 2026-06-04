@@ -1,9 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude, DoAndIfThenElse, OverloadedStrings, ExtendedDefaultRules #-}
 {-# LANGUAGE CPP #-}
 
--- Shelly's types are kinda borked.
-{-# OPTIONS_GHC -Wno-type-defaults #-}
-
 module IHaskell.Test.Completion (testCompletions) where
 
 import           Prelude
@@ -11,16 +8,16 @@ import           Prelude
 import           Data.List (elemIndex)
 import qualified Data.Text as T
 import           Control.Monad.IO.Class (liftIO)
-import           System.Environment (setEnv)
-import           System.Directory (setCurrentDirectory, getCurrentDirectory)
-import           System.FilePath (addTrailingPathSeparator)
+import           System.Environment (setEnv, lookupEnv)
+import           System.Directory (setCurrentDirectory, getCurrentDirectory, createDirectoryIfMissing,
+                                    removeDirectoryRecursive, doesDirectoryExist)
+import           System.FilePath ((</>), addTrailingPathSeparator)
+import           Data.Unique (newUnique)
+import           Control.Exception (bracket)
 
 import           GHC (setContext, parseImportDecl, InteractiveImport(..))
 
 import           Test.Hspec
-
-import           Shelly (toTextIgnore, (</>), shelly, fromText, get_env_text, FilePath, cd, mkdir_p,
-                         touchfile, withTmpDir)
 
 import           IHaskell.Eval.Evaluate (Interpreter, liftIO)
 import           IHaskell.IPython (getSandboxPackageConf)
@@ -139,9 +136,8 @@ testIdentifierCompletion = describe "Completion" $ do
 testCommandCompletion :: Spec
 testCommandCompletion = describe "Completes commands" $ do
   it "properly completes haskell file paths on :load directive" $ do
-    let loading xs = ":load " ++ T.unpack (toTextIgnore xs)
-        paths = map (T.unpack . toTextIgnore)
-        testInDirectory start comps = loading start `shouldHaveCompletionsInDirectory` paths comps
+    let loading xs = ":load " ++ xs
+        testInDirectory start comps = loading start `shouldHaveCompletionsInDirectory` id comps
     testInDirectory ("dir" </> "file*") ["dir" </> "file2.hs", "dir" </> "file2.lhs"]
     testInDirectory ("" </> "file1*") ["" </> "file1.hs", "" </> "file1.lhs"]
     testInDirectory ("" </> "file1*") ["" </> "file1.hs", "" </> "file1.lhs"]
@@ -149,19 +145,19 @@ testCommandCompletion = describe "Completes commands" $ do
     testInDirectory ("" </> "." </> "*") [addTrailingPathSeparator $ "." </> "dir", "." </> "file1.hs", "." </> "file1.lhs"]
 
   it "provides path completions on empty shell cmds " $
-    ":! cd *" `shouldHaveCompletionsInDirectory` map (T.unpack . toTextIgnore)
+    ":! cd *" `shouldHaveCompletionsInDirectory` id
                                                    [ addTrailingPathSeparator $ "" </> "dir"
                                                    , "" </> "file1.hs"
                                                    , "" </> "file1.lhs"
                                                    ]
 
   let withHsHome action = withHsDirectory $ \dirPath -> do
-        home <- shelly $ Shelly.get_env_text "HOME"
+        home <- liftIO $ lookupEnv "HOME"
         setHomeEvent dirPath
         result <- action
-        setHomeEvent $ Shelly.fromText home
+        setHomeEvent (fromMaybe "" home)
         return result
-      setHomeEvent path = liftIO $ setEnv "HOME" (T.unpack $ toTextIgnore path)
+      setHomeEvent path = liftIO $ setEnv "HOME" path
 
   it "correctly interprets ~ as the environment HOME variable" $ do
     let tildeDir = addTrailingPathSeparator $ "~" </> "dir"
@@ -190,35 +186,33 @@ testCommandCompletion = describe "Completes commands" $ do
   it "generates the correct matchingText on `:l ~/*` " $
     ":l ~/*" `shouldHaveMatchingText` ("~/" :: String)
 
-inDirectory :: [Shelly.FilePath] -- ^ directories relative to temporary directory
-            -> [Shelly.FilePath] -- ^ files relative to temporary directory
-            -> (Shelly.FilePath -> Interpreter a)
+-- | Run an Interpreter action inside a temporary directory with some files.
+inDirectory :: [FilePath] -- ^ directories relative to temporary directory
+            -> [FilePath] -- ^ files relative to temporary directory
+            -> (FilePath -> Interpreter a)
             -> IO a
--- | Run an Interpreter action, but first make a temporary directory
---   with some files and folder and cd to it.
-inDirectory dirs files action = shelly $ withTmpDir $ \dirPath -> do
-  cd dirPath
-  mapM_ mkdir_p dirs
-  mapM_ touchfile files
-  liftIO $ ghc $ wrap (T.unpack $ toTextIgnore dirPath) (action dirPath)
+inDirectory dirs files action = do
+  u <- show <$> newUnique
+  let tmpDir = "/tmp/ihaskell-test-" ++ u
+  createDirectoryIfMissing True tmpDir
+  bracket
+    (return tmpDir)
+    (\d -> doesDirectoryExist d >>= flip when (removeDirectoryRecursive d))
+    (\dirPath -> do
+      setCurrentDirectory dirPath
+      mapM_ (createDirectoryIfMissing True) dirs
+      mapM_ (\f -> writeFile f "") files
+      ghc $ wrap dirPath (action dirPath))
   where
-    cdEvent path = liftIO $ setCurrentDirectory path
-    wrap :: String -> Interpreter a -> Interpreter a
+    wrap :: FilePath -> Interpreter a -> Interpreter a
     wrap path actn = do
       initCompleter
       pwd <- IHaskell.Eval.Evaluate.liftIO getCurrentDirectory
-      cdEvent path   -- change to the temporary directory
-      out <- actn  -- run action
-      cdEvent pwd    -- change back to the original directory
+      IHaskell.Eval.Evaluate.liftIO $ setCurrentDirectory path
+      out <- actn
+      IHaskell.Eval.Evaluate.liftIO $ setCurrentDirectory pwd
       return out
 
-withHsDirectory :: (Shelly.FilePath -> Interpreter a) -> IO a
-withHsDirectory = inDirectory [p "" </> p "dir", p "dir" </> p "dir1"]
-                    [ p "" </> p "file1.hs"
-                    , p "dir" </> p "file2.hs"
-                    , p "" </> p "file1.lhs"
-                    , p "dir" </> p "file2.lhs"
-                    ]
-  where
-    p :: T.Text -> T.Text
-    p = id
+withHsDirectory :: (FilePath -> Interpreter a) -> IO a
+withHsDirectory = inDirectory ["dir", "dir" </> "dir1"]
+                    ["file1.hs", "dir" </> "file2.hs", "file1.lhs", "dir" </> "file2.lhs"]
