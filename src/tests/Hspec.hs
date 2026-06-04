@@ -19,6 +19,7 @@ import           IHaskell.Test.Hoogle (testHoogle)
 #endif
 
 import           IHaskell.Test.Properties (testProperties)
+import           IHaskell.Test.Evaluate.Capture (testCapture)
 
 main :: IO ()
 main = do
@@ -38,6 +39,7 @@ main = do
     testEval
     testCompletions
     testProperties
+    testCapture
 #ifdef USE_HOOGLE
     testHoogle
 #endif
