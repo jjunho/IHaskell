@@ -26,7 +26,6 @@ import           System.Exit (exitWith, ExitCode(..))
 import           System.Posix.Signals
 #endif
 import           Language.Haskell.GHC.Parser (runParser, parserModule, ParseOutput(..))
-import           StringUtils (strip)
 
 import qualified Data.Map as Map
 import           Data.List (break, last)
@@ -394,10 +393,9 @@ replyTo _ _ req@IsCompleteRequest{} replyHeader state = do
     isInputComplete = do
       dflags <- getSessionDynFlags
       let code = T.unpack $ inputToReview req
-          stripped = strip code
-      if null stripped
+      if null (words code)
         then return CodeComplete
-        else case runParser dflags parserModule stripped of
+        else case runParser dflags parserModule code of
           Parsed _       -> return CodeComplete
           Partial _ _    -> return $ CodeIncomplete $ indent 4
           Failure _ _    -> return CodeInvalid
@@ -481,6 +479,13 @@ replyTo _ interface ocomm@CommOpen{} replyHeader state = do
   when (targetMatches && valueMatches) $ send msg
 
   return (state, SendNothing)
+
+replyTo _ _ InterruptRequest{} replyHeader state = liftIO $ do
+  -- Send SIGINT to interrupt running GHC evaluation.
+  -- The existing Ctrl-C handler (CatchOnce) will fire
+  -- and the UserInterrupt exception will propagate through gcatch.
+  raiseSignal keyboardSignal
+  return (state, InterruptReply replyHeader)
 
 -- TODO: What else can be implemented?
 replyTo _ _ message _ state = do

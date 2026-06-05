@@ -209,9 +209,11 @@ data MessageType = KernelInfoReplyMessage
                  | CommInfoRequestMessage
                  | CommInfoReplyMessage
                  | CommCloseMessage
-                 | HistoryRequestMessage
-                 | HistoryReplyMessage
-  deriving (Show, Read, Eq)
+                  | HistoryRequestMessage
+                  | HistoryReplyMessage
+                  | InterruptRequestMessage
+                  | InterruptReplyMessage
+   deriving (Show, Read, Eq)
 
 showMessageType :: MessageType -> String
 showMessageType KernelInfoReplyMessage = "kernel_info_reply"
@@ -245,6 +247,8 @@ showMessageType CommInfoReplyMessage = "comm_info_reply"
 showMessageType CommCloseMessage = "comm_close"
 showMessageType HistoryRequestMessage = "history_request"
 showMessageType HistoryReplyMessage = "history_reply"
+showMessageType InterruptRequestMessage = "interrupt_request"
+showMessageType InterruptReplyMessage = "interrupt_reply"
 
 isIOPubMessageType :: MessageType -> Bool
 isIOPubMessageType StatusMessage = True
@@ -294,6 +298,8 @@ instance FromJSON MessageType where
       "comm_close"          -> return CommCloseMessage
       "history_request"     -> return HistoryRequestMessage
       "history_reply"       -> return HistoryReplyMessage
+      "interrupt_request"   -> return InterruptRequestMessage
+      "interrupt_reply"     -> return InterruptReplyMessage
       "status_message"      -> return StatusMessage
 
       _                     -> fail ("Unknown message type: " ++ show s)
@@ -531,8 +537,10 @@ data Message =
                                              -- transformed input.
                  , historyAccessType :: HistoryAccessType -- ^ What history is being requested.
                  }
-             | HistoryReply { header :: MessageHeader, historyReply :: [HistoryReplyElement] }
-             | SendNothing -- Dummy message; nothing is sent.
+              | HistoryReply { header :: MessageHeader, historyReply :: [HistoryReplyElement] }
+              | InterruptRequest { header :: MessageHeader }
+              | InterruptReply { header :: MessageHeader }
+              | SendNothing -- Dummy message; nothing is sent.
   deriving Show
 
 -- Convert message bodies into JSON.
@@ -678,6 +686,9 @@ instance ToJSON Message where
       tuplify (HistoryReplyElement sess linum res) = (sess, linum, case res of
                                                                      Left inp         -> toJSON inp
                                                                      Right (inp, out) -> toJSON out)
+
+  toJSON InterruptRequest{} = object []
+  toJSON InterruptReply{} = object []
 
   toJSON req@IsCompleteReply{} =
     object pairs
@@ -929,6 +940,8 @@ replyType CompleteRequestMessage = Just CompleteReplyMessage
 replyType InspectRequestMessage = Just InspectReplyMessage
 replyType ShutdownRequestMessage = Just ShutdownReplyMessage
 replyType HistoryRequestMessage = Just HistoryReplyMessage
+replyType InterruptRequestMessage = Just InterruptReplyMessage
+replyType InterruptReplyMessage = Nothing
 replyType CommOpenMessage = Just CommDataMessage
 replyType CommInfoRequestMessage = Just CommInfoReplyMessage
 replyType _ = Nothing

@@ -91,6 +91,7 @@ parser CommDataMessage = commDataParser
 parser CommInfoRequestMessage = commInfoRequestParser
 parser CommCloseMessage = commCloseParser
 parser HistoryRequestMessage = historyRequestParser
+parser InterruptRequestMessage = interruptRequestParser
 parser StatusMessage = statusMessageParser
 parser StreamMessage = streamMessageParser
 parser InputMessage = inputMessageParser
@@ -202,6 +203,9 @@ historyRequestParser = requestParser $ \obj ->
           "tail"   -> HistoryTail
           "search" -> HistorySearch
           str      -> error $ "Unknown history access type: " ++ str
+
+interruptRequestParser :: LByteString -> Message
+interruptRequestParser = requestParser $ \(_ :: Value) -> pure $ InterruptRequest noHeader
 
 statusMessageParser :: LByteString -> Message
 statusMessageParser = requestParser $ \obj -> do
