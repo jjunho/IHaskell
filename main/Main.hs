@@ -367,8 +367,11 @@ replyTo _ interface req@ExecuteRequest { getCode = code } replyHeader state = do
   pager <- if usePager state
              then liftIO $ readMVar pOut
              else return []
+  -- Record in kernel history
+  let updatedState' = updatedState { kernelHistory =
+        kernelHistory updatedState ++ [(1, execCount, T.unpack code)] }
   return
-    (updatedState, ExecuteReply
+    (updatedState', ExecuteReply
                      { header = replyHeader
                      , pagerOutput = pager
                      , executionCounter = execCount
@@ -419,12 +422,14 @@ replyTo _ _ req@InspectRequest{} replyHeader state = do
 
 -- TODO: Implement history_reply.
 replyTo _ _ HistoryRequest{} replyHeader state = do
-  let reply = HistoryReply
-        { header = replyHeader
-        -- FIXME
-        , historyReply = []
-        }
-  return (state, reply)
+  let hist = kernelHistory state
+      maxEntries = 500
+      entries = map (\(sess, lin, code) ->
+        HistoryReplyElement sess lin (Left code)) (take maxEntries hist)
+  return (state, HistoryReply
+    { header = replyHeader
+    , historyReply = entries
+    })
 
 -- Accomodating the workaround for retrieving list of open comms from the kernel
 --

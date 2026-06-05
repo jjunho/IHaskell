@@ -189,8 +189,9 @@ data KernelState =
          , useShowTypes :: Bool
          , usePager :: Bool
          , openComms :: Map UUID Widget
-         , kernelLogLevel :: LogLevel
-         , supportLibrariesAvailable :: Bool
+          , kernelLogLevel :: LogLevel
+          , kernelHistory :: [(Int, Int, String)] -- ^ (session, line, code)
+          , supportLibrariesAvailable :: Bool
          , htmlCodeWrapperClass :: Maybe String -- ^ HTML output: class name for wrapper div
          , htmlCodeTokenPrefix :: String        -- ^ HTML output: class name prefix for token spans
          }
@@ -206,6 +207,7 @@ defaultKernelState = KernelState
   , usePager = True
   , openComms = mempty
   , kernelLogLevel = LogInfo
+  , kernelHistory = []
   , supportLibrariesAvailable = True
   , htmlCodeWrapperClass = Just "CodeMirror cm-s-jupyter cm-s-ipython"
   , htmlCodeTokenPrefix = "cm-"
