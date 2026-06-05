@@ -3,7 +3,7 @@
 **Branch**: `review/verification`  
 **Base**: `master` (7d765e9 — Nixpkgs 26.05)  
 **Total**: 29 files changed, +1,784 / -1,220 lines  
-**Tests**: 99 test cases across 7 modules, 98 pass (3 Hedgehog properties run 100× each)  
+**Tests**: 102 test cases across 7 modules, all pass (3 Hedgehog properties run 100× each)  
 **Build**: `cabal build` clean, `cabal test` passes
 
 ---
@@ -181,7 +181,7 @@ The main evaluation module was split into focused sub-modules:
 | `Test/Properties.hs` | 3 | Hedgehog property (×100 runs) |
 | `Test/Hoogle.hs` | 4 | JSON parsing |
 | `Test/Evaluate/Capture.hs` | 23 | Unit + IO (capture functions) |
-| **Total** | **99** × 100 property runs | |
+| **Total** | **102** × 100 property runs | |
 
 ### New Tests Added
 - `Capture.hs` — pure function tests (`generateVarName`, `generateInitStmts`, etc.)
@@ -203,7 +203,7 @@ The main evaluation module was split into focused sub-modules:
 | Dependencies removed | 4 (shelly, random, strict, setenv) |
 | Dependencies gated | 2 (http-client, http-client-tls behind use-hoogle) |
 | Dependencies added | 1 (hedgehog, test only) |
-| Test cases | 99 (+ 3 property × 100) |
+| Test cases | 102 (+ 3 property × 100) |
 | Test coverage | Parser ✅, Capture ✅, Completion ✅, Eval ⚠️, Widgets ❌, Protocol ❌ |
 | Build | `cabal build` clean, GHC 9.12.2 |
 | Branch | `review/verification` |

@@ -74,7 +74,12 @@ System dependencies:
 
 Python:
 ```bash
-pip3 install jupyter
+pip3 install -r requirements.txt
+```
+
+Or manually:
+```bash
+pip3 install jupyter ipywidgets
 ```
 
 ### Cabal (recommended)
@@ -202,7 +207,7 @@ cabal build -f-use-hoogle  # without network deps
 ### Test
 
 ```bash
-cabal test              # 98 examples, 0 failures
+cabal test              # 102 examples, 0 failures
 ```
 
 | Module | Tests | Covers |
@@ -214,7 +219,7 @@ cabal test              # 98 examples, 0 failures
 | Test/Evaluate/Capture.hs | 23 | Capture generators, readChars, pollingLoop |
 | Test/Hoogle.hs | 4 | Hoogle JSON parsing |
 
-**Total**: 98 tests (+ 3 property × 100 random runs)
+**Total**: 102 tests (+ 3 property × 100 random runs)
 
 ### Project Structure
 
@@ -290,7 +295,7 @@ ihaskell-display/                 — Display packages (blaze, diagrams, charts,
 - Cabal 3.4 with common stanzas
 
 ### Testing
-- 98 tests (up from 76 upstream)
+- 102 tests (up from 76 upstream)
 - Hedgehog property tests
 - Capture: generators, readChars, pollingLoop
 - Oracle-verified across 5 review cycles
