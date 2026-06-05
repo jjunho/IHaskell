@@ -20,12 +20,12 @@ import           System.Environment (getArgs)
 import           System.Environment (setEnv)
 #ifdef mingw32_HOST_OS
 import           GHC.ConsoleHandler
-import           GHC (getSessionDynFlags)
 import           System.Exit (exitWith, ExitCode(..))
 #else
 import           System.Posix.Signals
 #endif
-import           Language.Haskell.GHC.Parser (runParser, parserModule, ParseOutput(..))
+import           GHC (getSessionDynFlags)
+import qualified Language.Haskell.GHC.Parser as GHC_Parser
 
 import qualified Data.Map as Map
 import           Data.List (break, last)
@@ -291,6 +291,23 @@ createReplyHeader parent = do
   return $ MessageHeader (mhIdentifiers parent) (Just parent) mempty
             newMessageId (mhSessionId parent) (mhUsername parent) repType []
 
+-- | Heuristic: does the code look like it could be completed with more input?
+-- Returns 'True' for trailing keywords, open braces/brackets, etc.
+looksIncomplete :: String -> Bool
+looksIncomplete code =
+  let trimmed = reverse $ dropWhile (`elem` " \t\n") code
+  in any (`isPrefixOf` trimmed) (reverse <$> incompleteTriggers)
+     || unmatched "(" trimmed
+     || unmatched "[" trimmed
+     || unmatched "{" trimmed
+  where
+    incompleteTriggers = ["do", "where", "of", "let", "if", "then", "else", "::", "->", "=", "\\", "{-#"]
+    unmatched c s = countChar c s > countChar (close c) s
+    countChar c = length . filter (== c)
+    close '(' = ')'; close '[' = ']'; close '{' = '}'; close _ = ' '
+
+    -- Check reversed strings
+    isPrefixOf revPat revStr = take (length revPat) revStr == revPat
 -- | Compute a reply to a message.
 replyTo :: KernelSpecOptions -> ZeroMQInterface -> Message -> MessageHeader -> KernelState -> Interpreter (KernelState, Message)
 -- Reply to kernel info requests with a kernel info reply. No computation needs to be done, as a
@@ -372,7 +389,8 @@ replyTo _ interface req@ExecuteRequest { getCode = code } replyHeader state = do
              else return []
   -- Record in kernel history
   let updatedState' = updatedState { kernelHistory =
-        kernelHistory updatedState ++ [(1, execCount, T.unpack code)] }
+        let hist = kernelHistory updatedState ++ [(1, execCount, T.unpack code)]
+        in take 1000 hist }
   return
     (updatedState', ExecuteReply
                      { header = replyHeader
@@ -392,14 +410,21 @@ replyTo _ _ req@IsCompleteRequest{} replyHeader state = do
   where
     isInputComplete = do
       dflags <- getSessionDynFlags
-      let code = T.unpack $ inputToReview req
+      let code = inputToReview req
       if null (words code)
         then return CodeComplete
-        else case runParser dflags parserModule code of
-          Parsed _       -> return CodeComplete
-          Partial _ _    -> return $ CodeIncomplete $ indent 4
-          Failure _ _    -> return CodeInvalid
+        else case GHC_Parser.runParser dflags GHC_Parser.parserModule code of
+          GHC_Parser.Parsed _    -> return CodeComplete
+          GHC_Parser.Partial _ _ -> return $ CodeIncomplete $ indent 4
+          GHC_Parser.Failure _ _ ->
+            -- parserModule fails for incomplete code too (not just syntax errors).
+            -- Check heuristics: if code ends with continuation keywords or unmatched
+            -- braces/backets, it's incomplete rather than invalid.
+            if looksIncomplete code
+              then return $ CodeIncomplete $ indent 4
+              else return CodeInvalid
     indent n = replicate n ' '
+
 
 replyTo _ _ req@CompleteRequest{} replyHeader state = do
   let code = getCode req
@@ -481,10 +506,9 @@ replyTo _ interface ocomm@CommOpen{} replyHeader state = do
   return (state, SendNothing)
 
 replyTo _ _ InterruptRequest{} replyHeader state = liftIO $ do
-  -- Send SIGINT to interrupt running GHC evaluation.
-  -- The existing Ctrl-C handler (CatchOnce) will fire
-  -- and the UserInterrupt exception will propagate through gcatch.
+#ifndef mingw32_HOST_OS
   raiseSignal keyboardSignal
+#endif
   return (state, InterruptReply replyHeader)
 
 -- TODO: What else can be implemented?
