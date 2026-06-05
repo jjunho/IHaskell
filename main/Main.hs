@@ -20,10 +20,14 @@ import           System.Environment (getArgs)
 import           System.Environment (setEnv)
 #ifdef mingw32_HOST_OS
 import           GHC.ConsoleHandler
+import           GHC (getSessionDynFlags)
 import           System.Exit (exitWith, ExitCode(..))
 #else
 import           System.Posix.Signals
 #endif
+import           Language.Haskell.GHC.Parser (runParser, parserModule, ParseOutput(..))
+import           StringUtils (strip)
+
 import qualified Data.Map as Map
 import           Data.List (break, last)
 import           Data.Version (showVersion)
@@ -388,10 +392,15 @@ replyTo _ _ req@IsCompleteRequest{} replyHeader state = do
 
   where
     isInputComplete = do
-      let code = lines $ inputToReview req
-      if nub (last code) == " "
-         then return CodeComplete
-         else return $ CodeIncomplete $ indent 4
+      dflags <- getSessionDynFlags
+      let code = T.unpack $ inputToReview req
+          stripped = strip code
+      if null stripped
+        then return CodeComplete
+        else case runParser dflags parserModule stripped of
+          Parsed _       -> return CodeComplete
+          Partial _ _    -> return $ CodeIncomplete $ indent 4
+          Failure _ _    -> return CodeInvalid
     indent n = replicate n ' '
 
 replyTo _ _ req@CompleteRequest{} replyHeader state = do
