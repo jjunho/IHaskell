@@ -76,7 +76,6 @@ import           Control.Concurrent.STM.TChan
 import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
 import           System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Time as Time
-import qualified Data.Text as T
 
 import qualified Data.Text.Encoding as E
 

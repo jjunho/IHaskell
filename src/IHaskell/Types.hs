@@ -170,10 +170,10 @@ instance ToJSON Display where
 instance Binary Display
 
 instance Semigroup Display where
-  Display a <> Display b = Display (a ++ b)
   ManyDisplay a <> ManyDisplay b = ManyDisplay (a ++ b)
   ManyDisplay a <> b = ManyDisplay (a ++ [b])
   a <> ManyDisplay b = ManyDisplay (a : b)
+  a <> b = ManyDisplay [a, b]
 
 instance Monoid Display where
   mempty = Display []

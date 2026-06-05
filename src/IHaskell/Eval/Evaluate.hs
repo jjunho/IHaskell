@@ -111,7 +111,9 @@ import           IHaskell.IPython
 import           IHaskell.Eval.Parser
 import           IHaskell.Display
 import           IHaskell.Eval.Widgets (relayWidgetMessages)
-import           IHaskell.Eval.Evaluate.Capture (readChars, pollingLoop, defaultPollConfig)
+import           IHaskell.Eval.Evaluate.Capture (readChars, pollingLoop, defaultPollConfig,
+                                                   generateInitStmts, generatePostStmts,
+                                                   voidpf, generateVarName)
 import           IHaskell.Eval.Util
 import           IHaskell.BrokenPackages
 import           StringUtils (replace, split, strip, rstrip)
@@ -946,80 +948,11 @@ capturedEval output stmt = do
             NoException    -> ExecComplete (Right []) 0
             AnyException e -> ExecComplete (Left e)   0
 
-      -- Variable names generation: use the unique suffix so that each invocation
-      -- gets fresh, non-colliding variables.
-      var name = name ++ suffix
-
-      -- Variables for the pipe input and outputs.
-      readVariable = var "file_read_var_"
-      writeVariable = var "file_write_var_"
-
-      -- Variable used to store true `it` value.
-      itVariable = var "it_var_"
-
-      voidpf str = printf $ str ++ " IHaskellPrelude.>> IHaskellPrelude.return ()"
-
-#ifdef mingw32_HOST_OS
-  let -- Variables used to restore stdout/stderr
-      restoreVariableStdout = var "restore_stdout_var_"
-      restoreVariableStderr = var "restore_stderr_var_"
-      initStmts =
-        [ printf "let %s = it" itVariable
-        , printf "(%s, %s) <- IHaskellProcess.createPipe" readVariable writeVariable
-
-        -- Handle redirection
-        , printf "%s <- IHaskellIO.redirectHandle %s IHaskellSysIO.stdout" restoreVariableStdout writeVariable
-        , printf "%s <- IHaskellIO.redirectHandle %s IHaskellSysIO.stderr" restoreVariableStderr writeVariable
-
-        , voidpf "IHaskellSysIO.hSetBuffering IHaskellSysIO.stdout IHaskellSysIO.NoBuffering"
-        , voidpf "IHaskellSysIO.hSetBuffering IHaskellSysIO.stderr IHaskellSysIO.NoBuffering"
-
-        -- Important: set text encoding to UTF-8
-        , voidpf "IHaskellSysIO.hSetEncoding IHaskellSysIO.stdout IHaskellSysIO.utf8"
-        , voidpf "IHaskellSysIO.hSetEncoding IHaskellSysIO.stderr IHaskellSysIO.utf8"
-        , printf "let it = %s" itVariable
-        ]
-      postStmts =
-        [ printf "let %s = it" itVariable
-        , voidpf "IHaskellSysIO.hFlush IHaskellSysIO.stdout"
-        , voidpf "IHaskellSysIO.hFlush IHaskellSysIO.stderr"
-        , voidpf "%s" restoreVariableStdout
-        , voidpf "%s" restoreVariableStderr
-        , voidpf "IHaskellSysIO.hClose %s" writeVariable
-        , printf "let it = %s" itVariable
-        ]
-#else
-  let
-      -- Variable where to store old stdout.
-      oldVariableStdout = var "old_var_stdout_"
-
-      -- Variable where to store old stderr.
-      oldVariableStderr = var "old_var_stderr_"
-
-      -- Statements run before the thing we're evaluating.
-      initStmts =
-        [ printf "let %s = it" itVariable
-        , printf "(%s, %s) <- IHaskellIO.createPipe" readVariable writeVariable
-        , printf "%s <- IHaskellIO.dup IHaskellIO.stdOutput" oldVariableStdout
-        , printf "%s <- IHaskellIO.dup IHaskellIO.stdError" oldVariableStderr
-        , voidpf "IHaskellIO.dupTo %s IHaskellIO.stdOutput" writeVariable
-        , voidpf "IHaskellIO.dupTo %s IHaskellIO.stdError" writeVariable
-        , voidpf "IHaskellSysIO.hSetBuffering IHaskellSysIO.stdout IHaskellSysIO.NoBuffering"
-        , voidpf "IHaskellSysIO.hSetBuffering IHaskellSysIO.stderr IHaskellSysIO.NoBuffering"
-        , printf "let it = %s" itVariable
-        ]
-
-      -- Statements run after evaluation.
-      postStmts =
-        [ printf "let %s = it" itVariable
-        , voidpf "IHaskellSysIO.hFlush IHaskellSysIO.stdout"
-        , voidpf "IHaskellSysIO.hFlush IHaskellSysIO.stderr"
-        , voidpf "IHaskellIO.dupTo %s IHaskellIO.stdOutput" oldVariableStdout
-        , voidpf "IHaskellIO.dupTo %s IHaskellIO.stdError" oldVariableStderr
-        , voidpf "IHaskellIO.closeFd %s" writeVariable
-        , printf "let it = %s" itVariable
-        ]
-#endif
+      initStmts  = generateInitStmts suffix isWindows
+      postStmts  = generatePostStmts suffix isWindows
+      readVariable = generateVarName suffix "file_read_var_"
+      writeVariable = generateVarName suffix "file_write_var_"
+      itVariable = generateVarName suffix "it_var_"
 
   -- Initialize evaluation context.
   forM_ initStmts goStmt
@@ -1027,16 +960,16 @@ capturedEval output stmt = do
   -- This works fine on GHC 8.0 and newer
   dyn <- dynCompileExpr readVariable
   pipe <- case fromDynamic dyn of
-            Nothing -> error "Evaluate: Bad pipe"
+              Nothing -> error "Evaluate: Bad pipe"
 #ifdef mingw32_HOST_OS
-            Just hdl -> liftIO $ do
-                hSetEncoding hdl utf8
-                return hdl
+              Just hdl -> liftIO $ do
+                  hSetEncoding hdl utf8
+                  return hdl
 #else
-            Just fd -> liftIO $ do
-                hdl <- fdToHandle fd
-                hSetEncoding hdl utf8
-                return hdl
+              Just fd -> liftIO $ do
+                  hdl <- fdToHandle fd
+                  hSetEncoding hdl utf8
+                  return hdl
 #endif
 
   -- Keep track of whether execution has completed.
@@ -1055,12 +988,19 @@ capturedEval output stmt = do
               -- Finalize evaluation context.
               forM_ postStmts goStmt
 
-              -- Once context is finalized, reading can finish. Wait for reading to finish to that the output
-              -- accumulator is completely filled.
+              -- Once context is finalized, reading can finish.
               liftIO $ takeMVar finishedReading
 
   printedOutput <- liftIO $ readMVar outputAccum
   return (printedOutput, result)
+
+-- | Are we running on Windows?
+isWindows :: Bool
+#ifdef mingw32_HOST_OS
+isWindows = True
+#else
+isWindows = False
+#endif
 
 data AnyException = NoException
                   | AnyException SomeException
