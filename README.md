@@ -1,4 +1,4 @@
-![Haskell-AI](images/jupyterhaskell.svg)
+![Haskell-AI](html/jupyterhaskell.svg)
 
 # IHaskell — Haskell-AI Kernel
 
