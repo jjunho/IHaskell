@@ -112,6 +112,7 @@ library
                     IHaskell.Eval.ParseShell
                     IHaskell.Eval.Widgets
                     IHaskell.Eval.Util
+                    IHaskell.Eval.Util.Ppr
                     IHaskell.IPython
                    IHaskell.IPython.Stdin
                    IHaskell.Flags

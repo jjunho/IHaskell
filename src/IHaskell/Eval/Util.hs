@@ -28,6 +28,7 @@ module IHaskell.Eval.Util (
     ) where
 
 import           IHaskellPrelude
+import           IHaskell.Eval.Util.Ppr (doc, pprDynFlags, pprLanguages)
 #if MIN_VERSION_ghc(8,6,0)
 #else
 import qualified Data.ByteString.Char8 as CBS
@@ -182,113 +183,13 @@ setWayDynFlag :: DynFlags
               -> DynFlags
 setWayDynFlag =
   if hostIsDynamic
-  then addWay' WayDyn
+                then addWay' WayDyn
   else id
 #if MIN_VERSION_ghc(9,0,0)
 #else
   where
     hostIsDynamic = dynamicGhc
 #endif
-
--- | Pretty-print dynamic flags (taken from 'InteractiveUI' module of `ghc-bin`)
-pprDynFlags :: Bool       -- ^ Whether to include flags which are on by default
-            -> DynFlags
-            -> O.SDoc
-pprDynFlags show_all dflags =
-  O.vcat
-    [ O.text "GHCi-specific dynamic flag settings:" O.$$
-      O.nest 2 (O.vcat (map (setting opt) ghciFlags))
-    , O.text "other dynamic, non-language, flag settings:" O.$$
-      O.nest 2 (O.vcat (map (setting opt) others))
-    , O.text "warning settings:" O.$$
-      O.nest 2 (O.vcat (map (setting wopt) wFlags))
-    ]
-  where
-
-    wFlags = DynFlags.wWarningFlags
-
-    opt = gopt
-
-    setting test flag
-      | quiet = O.empty :: O.SDoc
-      | is_on = fstr name :: O.SDoc
-      | otherwise = fnostr name :: O.SDoc
-      where
-        name = flagSpecName flag
-        f = flagSpecFlag flag
-        is_on = test f dflags
-        quiet = not show_all && test f default_dflags == is_on
-
-#if MIN_VERSION_ghc(9,6,0)
-    default_dflags = defaultDynFlags (settings dflags)
-#elif MIN_VERSION_ghc(8,10,0)
-    default_dflags = defaultDynFlags (settings dflags) (llvmConfig dflags)
-#elif MIN_VERSION_ghc(8,6,0)
-    default_dflags = defaultDynFlags (settings dflags) (llvmTargets dflags, llvmPasses dflags)
-#else
-    default_dflags = defaultDynFlags (settings dflags) (llvmTargets dflags)
-#endif
-
-    fstr, fnostr :: String -> O.SDoc
-    fstr str = O.text "-f" O.<> O.text str
-
-    fnostr str = O.text "-fno-" O.<> O.text str
-
-    (ghciFlags, others) = partition (\f -> flagSpecFlag f `elem` flgs) DynFlags.fFlags
-
-    flgs = concat [flgs1, flgs2, flgs3]
-
-    flgs1 = [Opt_PrintExplicitForalls]
-    flgs2 = [Opt_PrintExplicitKinds]
-
-flgs3 :: [GeneralFlag]
-flgs3 = [Opt_PrintBindResult, Opt_BreakOnException, Opt_BreakOnError, Opt_PrintEvldWithShow]
-
--- | Pretty-print the base language and active options (taken from `InteractiveUI` module of
--- `ghc-bin`)
-pprLanguages :: Bool      -- ^ Whether to include flags which are on by default
-             -> DynFlags
-             -> O.SDoc
-pprLanguages show_all dflags =
-  O.vcat
-    [ O.text "base language is: " O.<>
-      case language dflags of
-        Nothing          -> O.text "Haskell2010"
-        Just Haskell98   -> O.text "Haskell98"
-        Just Haskell2010 -> O.text "Haskell2010"
-#if MIN_VERSION_ghc(9,4,0)
-        Just GHC2021 -> O.text "GHC2021"
-#else
-#endif
-    , (if show_all
-         then O.text "all active language options:"
-         else O.text "with the following modifiers:") O.$$
-      O.nest 2 (O.vcat (map (setting xopt) DynFlags.xFlags))
-    ]
-  where
-    setting test flag
-      | quiet = O.empty
-      | is_on = O.text "-X" O.<> O.text name
-      | otherwise = O.text "-XNo" O.<> O.text name
-      where
-        name = flagSpecName flag
-        f = flagSpecFlag flag
-        is_on = test f dflags
-        quiet = not show_all && test f default_dflags == is_on
-
-    default_dflags =
-#if MIN_VERSION_ghc(9,6,0)
-      defaultDynFlags (settings dflags) `lang_set`
-#elif MIN_VERSION_ghc(8,10,0)
-      defaultDynFlags (settings dflags) (llvmConfig dflags) `lang_set`
-#elif MIN_VERSION_ghc(8,6,0)
-      defaultDynFlags (settings dflags) (llvmTargets dflags, llvmPasses dflags) `lang_set`
-#else
-      defaultDynFlags (settings dflags) (llvmTargets dflags) `lang_set`
-#endif
-      case language dflags of
-        Nothing -> Just Haskell2010
-        other   -> other
 
 -- | Set an extension and update flags. Return @Nothing@ on success. On failure, return an error
 -- message.
@@ -345,43 +246,6 @@ setFlags ext = do
   return $ noParseErrs ++ warnErrs
 
 -- | Convert an 'SDoc' into a string. This is similar to the family of 'showSDoc' functions, but
--- does not impose an arbitrary width limit on the output (in terms of number of columns). Instead,
--- it respsects the 'pprCols' field in the structure returned by 'getSessionDynFlags', and thus
--- gives a configurable width of output.
-doc :: GhcMonad m => O.SDoc -> m String
-doc sdoc = do
-  flags <- getSessionDynFlags
-#if MIN_VERSION_ghc(9,6,0)
-  let unqual = O.neverQualify
-#else
-  unqual <- getPrintUnqual
-#endif
-#if MIN_VERSION_ghc(9,0,0)
-  let style = O.mkUserStyle unqual O.AllTheWay
-#else
-  let style = O.mkUserStyle flags unqual O.AllTheWay
-#endif
-  let cols = pprCols flags
-#if MIN_VERSION_ghc(9,2,0)
-      d = O.runSDoc sdoc (initSDocContext flags style)
-  return $ Pretty.fullRender (Pretty.PageMode False) cols 1.5 string_txt "" d
-#else
-      d = O.runSDoc sdoc (O.initSDocContext flags style)
-  return $ Pretty.fullRender Pretty.PageMode cols 1.5 string_txt "" d
-#endif
-
-  where
-    string_txt :: Pretty.TextDetails -> String -> String
-#if MIN_VERSION_ghc(8,6,0)
-    string_txt = Pretty.txtPrinter
-#else
-    string_txt (Pretty.Chr c) s = c : s
-    string_txt (Pretty.Str s1) s2 = s1 ++ s2
-    string_txt (Pretty.PStr s1) s2 = unpackFS s1 ++ s2
-    string_txt (Pretty.LStr s1 _) s2 = unpackLitString s1 ++ s2
-    string_txt (Pretty.ZStr s1) s2 = CBS.unpack (fastZStringToByteString s1) ++ s2
-#endif
-
 -- | Initialize the GHC API. Run this as the first thing in the `runGhc`. This initializes some dyn
 -- flags (@ExtendedDefaultRules@,
 -- @NoMonomorphismRestriction@), sets the target to interpreted, link in
