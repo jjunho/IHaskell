@@ -194,6 +194,7 @@ Test-Suite hspec
         transformers,
         directory,
         filepath,
+        process,
         text,
         ihaskell,
         binary,
@@ -201,7 +202,8 @@ Test-Suite hspec
         hspec,
         hspec-contrib,
         HUnit,
-        raw-strings-qq
+        raw-strings-qq,
+        stm
 
 source-repository head
   type:     git

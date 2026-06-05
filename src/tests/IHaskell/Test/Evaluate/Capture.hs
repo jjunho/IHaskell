@@ -6,6 +6,13 @@ import           Prelude
 import           Test.Hspec
 import           Data.List (isInfixOf)
 
+import           System.IO (hPutStr, hClose, hFlush, hSetBuffering, BufferMode(NoBuffering))
+import           System.Process (createPipe)
+import           Control.Concurrent (forkIO, threadDelay)
+import           Control.Concurrent.MVar (newMVar, newEmptyMVar, readMVar, putMVar, takeMVar)
+import           Control.Concurrent.STM (TVar, newTVarIO, readTVarIO, atomically, writeTVar)
+import           Data.IORef (IORef, newIORef, readIORef, writeIORef)
+
 import           IHaskell.Eval.Evaluate.Capture
                    (generateVarName, voidpf, generateInitStmts, generatePostStmts,
                     readChars, PollConfig(..), defaultPollConfig, pollingLoop)
@@ -71,3 +78,62 @@ testCapture = describe "IHaskell.Eval.Evaluate.Capture" $ do
 
     it "ends with let it = it_var" $
       last posix `shouldBe` "let it = it_var_42"
+
+  describe "readChars" $ do
+    it "reads up to delimiter" $ do
+      (readEnd, writeEnd) <- createPipe
+      hPutStr writeEnd "hello\nworld"
+      hClose writeEnd
+      result <- readChars readEnd "\n" 100
+      result `shouldBe` "hello\n"
+      hClose readEnd
+
+    it "stops at max chars" $ do
+      (readEnd, writeEnd) <- createPipe
+      hPutStr writeEnd "abcdefghij"
+      hClose writeEnd
+      result <- readChars readEnd "" 5
+      length result `shouldSatisfy` (<= 5)
+      hClose readEnd
+
+    it "returns empty when handle is closed" $ do
+      (readEnd, writeEnd) <- createPipe
+      hClose writeEnd
+      result <- readChars readEnd "" 100
+      result `shouldBe` ""
+      hClose readEnd
+
+    it "returns empty at zero limit" $ do
+      (readEnd, _) <- createPipe
+      readChars readEnd "" 0 `shouldReturn` ""
+
+  describe "pollingLoop" $ do
+    it "captures output from a pipe" $ do
+      (readEnd, writeEnd) <- createPipe
+      hSetBuffering writeEnd NoBuffering
+      completed <- newTVarIO False
+      finishedReading <- newEmptyMVar
+      outputAccum <- newMVar ""
+      published <- newIORef ""
+
+      let output str = writeIORef published str
+          fastCfg = defaultPollConfig { pollDelay = 1000 } -- 1ms
+
+      _ <- forkIO $ pollingLoop fastCfg readEnd output completed finishedReading outputAccum
+
+      hPutStr writeEnd "hello "
+      hFlush writeEnd
+      threadDelay 20000 -- 20ms
+
+      -- Signal completion
+      atomically $ writeTVar completed True
+      hPutStr writeEnd "done"
+      hFlush writeEnd
+      hClose writeEnd
+
+      takeMVar finishedReading
+      acc <- readMVar outputAccum
+      -- Should contain all output (pre and post completion)
+      acc `shouldContain` "hello"
+      acc `shouldContain` "done"
+      hClose readEnd
