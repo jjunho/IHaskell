@@ -40,7 +40,6 @@ import           IHaskell.Eval.Widgets (widgetHandler)
 import           IHaskell.Flags
 import           IHaskell.IPython
 import           IHaskell.Types
-import           IHaskell.Publish
 import           IHaskell.IPython.ZeroMQ
 import           IHaskell.IPython.Types
 import qualified IHaskell.IPython.Message.UUID as UUID

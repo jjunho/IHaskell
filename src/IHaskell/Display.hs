@@ -49,6 +49,9 @@ module IHaskell.Display (
     encode64,
     base64,
 
+    -- * Publish / output functions
+    publishResult,
+
     -- * Internal only use
     displayFromChan,
     serializeDisplay,
@@ -72,6 +75,8 @@ import           Control.Concurrent.STM (atomically)
 import           Control.Concurrent.STM.TChan
 import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
 import           System.IO.Unsafe (unsafePerformIO)
+import qualified Data.Time as Time
+import qualified Data.Text as T
 
 import qualified Data.Text.Encoding as E
 
@@ -211,3 +216,64 @@ printDisplay :: IHaskellDisplay a => a -> IO ()
 printDisplay disp = do
   chan <- readIORef displayChanRef
   display disp >>= atomically . writeTChan chan
+
+-- | Publish evaluation results to the frontend via ZeroMQ messages.
+-- Accumulates pager output in an MVar if a pager is being used.
+publishResult :: (Message -> IO ()) -- ^ A function to send messages
+              -> MessageHeader      -- ^ Message header to use for reply
+              -> MVar [Display]     -- ^ Accumulator for displays
+              -> MVar Bool          -- ^ Whether output needs clearing
+              -> MVar [DisplayData] -- ^ Pager output accumulator
+              -> Bool               -- ^ Whether to use the pager
+              -> EvaluationResult   -- ^ The evaluation result
+              -> ErrorOccurred      -- ^ Whether evaluation completed successfully
+              -> IO ()
+publishResult send replyHeader displayed updateNeeded poutput upager result success = do
+  let final = case result of
+        IntermediateResult{} -> False
+        FinalResult{}        -> True
+      outs = evaluationOutputs result
+  uniqueLabel <- getUniqueLabel
+  clear <- readMVar updateNeeded
+  when clear $ do
+    clearOutput
+    disps <- readMVar displayed
+    mapM_ (sendOutput uniqueLabel) $ reverse disps
+  sendOutput uniqueLabel outs
+  modifyMVar_ updateNeeded (const $ return $ not final)
+  when final $ do
+    modifyMVar_ displayed (return . (outs :))
+    case result of
+      IntermediateResult _ -> pure ()
+      FinalResult _ pager _ ->
+        unless (null pager) $
+          if upager
+            then modifyMVar_ poutput (return . (++ pager))
+            else sendOutput uniqueLabel $ Display pager
+  where
+    clearOutput = do
+      hdr <- dupHeader replyHeader ClearOutputMessage
+      send $ ClearOutput hdr True
+    sendOutput uniqueLabel (ManyDisplay manyOuts) =
+      mapM_ (sendOutput uniqueLabel) manyOuts
+    sendOutput uniqueLabel (Display outs) = case success of
+      Success -> do
+        hdr <- dupHeader replyHeader DisplayDataMessage
+        send $ PublishDisplayData hdr (map (makeUnique uniqueLabel) outs) Nothing
+      Failure -> do
+        hdr <- dupHeader replyHeader ExecuteErrorMessage
+        send $ ExecuteError hdr [T.pack (extractPlain outs)] "" ""
+    makeUnique l (DisplayData MimeSvg s) =
+      DisplayData MimeSvg
+        . T.replace "glyph" ("glyph-" <> l)
+        . T.replace "\"clip" ("\"clip-" <> l)
+        . T.replace "#clip" ("#clip-" <> l)
+        . T.replace "\"image" ("\"image-" <> l)
+        . T.replace "#image" ("#image-" <> l)
+        . T.replace "linearGradient id=\"linear" ("linearGradient id=\"linear-" <> l)
+        . T.replace "#linear" ("#linear-" <> l)
+        $ s
+    makeUnique _ x = x
+    getUniqueLabel =
+      fmap (\(Time.UTCTime d s) -> T.pack (show d) <> T.pack (show s))
+        Time.getCurrentTime

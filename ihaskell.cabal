@@ -110,10 +110,9 @@ library
                     IHaskell.Eval.Info
                     IHaskell.Eval.Parser
                     IHaskell.Eval.ParseShell
-                   IHaskell.Eval.Widgets
-                   IHaskell.Eval.Util
-                   IHaskell.Publish
-                   IHaskell.IPython
+                    IHaskell.Eval.Widgets
+                    IHaskell.Eval.Util
+                    IHaskell.IPython
                    IHaskell.IPython.Stdin
                    IHaskell.Flags
                    IHaskell.Types
