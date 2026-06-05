@@ -2,7 +2,7 @@
 
 **Branch**: `review/verification`  
 **Base**: `master` (7d765e9 — Nixpkgs 26.05)  
-**Total**: 29 files changed, +1,784 / -1,220 lines  
+**Total**: 33 files changed, +2,395 / -1,350 lines  
 **Tests**: 102 test cases across 6 modules, all pass (3 Hedgehog properties run 100× each)  
 **Build**: `cabal build` clean, `cabal test` passes
 
@@ -194,11 +194,11 @@ The main evaluation module was split into focused sub-modules:
 
 | Metric | Value |
 |--------|-------|
-| Commits | 39 |
-| Files changed | 29 |
-| Lines added | +1,784 |
-| Lines removed | -1,220 |
-| New modules | 7 (Compat, Format, Commands, Capture, Ppr, Util/Ppr, Evaluate/Capture) |
+| Commits | 42 |
+| Files changed | 33 |
+| Lines added | +2,395 |
+| Lines removed | -1,350 |
+| New modules | 5 (Compat, Format, Commands, Capture, Ppr) |
 | Deleted modules | 1 (Publish.hs) |
 | Dependencies removed | 4 (shelly, random, strict, setenv) |
 | Dependencies gated | 2 (http-client, http-client-tls behind use-hoogle) |
