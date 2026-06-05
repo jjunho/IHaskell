@@ -1,6 +1,6 @@
-![Haskell-jjunho](images/jupyterhaskell.svg)
+![Haskell-AI](images/jupyterhaskell.svg)
 
-# IHaskell — Haskell-jjunho Kernel
+# IHaskell — Haskell-AI Kernel
 
 [![Build Status](https://github.com/jjunho/IHaskell/actions/workflows/stack.yml/badge.svg)](https://github.com/jjunho/IHaskell/actions/workflows/stack.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
@@ -22,7 +22,7 @@ cabal exec ihaskell install
 jupyter notebook
 ```
 
-Select **Haskell-jjunho** from the kernel menu.
+Select **Haskell-AI** from the kernel menu.
 
 ---
 
@@ -94,7 +94,7 @@ cabal exec ihaskell install
 Verify:
 ```bash
 jupyter kernelspec list
-# Should show: haskell-jjunho
+# Should show: haskell-ai
 ```
 
 ### Enable Display Packages
@@ -121,8 +121,8 @@ stack exec ihaskell install --stack
 ### Docker
 
 ```bash
-docker build -t ihaskell-jjunho:latest .
-docker run --rm -p 8888:8888 ihaskell-jjunho:latest
+docker build -t ihaskell-ai:latest .
+docker run --rm -p 8888:8888 ihaskell-ai:latest
 ```
 
 ### Nix
@@ -136,7 +136,7 @@ nix build .#ihaskell-env-display-ghc98  # with display modules
 
 ## Usage
 
-Select **Haskell-jjunho** kernel in Jupyter.
+Select **Haskell-AI** kernel in Jupyter.
 
 ```haskell
 -- Simple expressions

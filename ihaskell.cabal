@@ -4,7 +4,7 @@ name:                ihaskell
 version:             0.13.0.0
 
 -- A short (one-line) description of the package.
-synopsis:            Haskell-jjunho kernel for the Jupyter project
+synopsis:            Haskell-AI kernel for the Jupyter project
 
 -- A longer description of the package.
 description:         IHaskell is a Haskell backend kernel for the Jupyter project. This allows using Haskell via

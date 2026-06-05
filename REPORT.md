@@ -155,8 +155,8 @@ The main evaluation module was split into focused sub-modules:
 
 ### Kernel Identity
 - **Files**: `src/IHaskell/IPython.hs`
-- Kernel name: `haskell-jjunho`
-- Display name: `Haskell-jjunho`
+- Kernel name: `haskell-ai`
+- Display name: `Haskell-AI`
 
 ---
 
@@ -207,8 +207,8 @@ The main evaluation module was split into focused sub-modules:
 | Test coverage | Parser ✅, Capture ✅, Completion ✅, Eval ⚠️, Widgets ❌, Protocol ❌ |
 | Build | `cabal build` clean, GHC 9.12.2 |
 | Branch | `review/verification` |
-| Jupyter kernel name | `haskell-jjunho` |
-| Jupyter display name | `Haskell-jjunho` |
+| Jupyter kernel name | `haskell-ai` |
+| Jupyter display name | `Haskell-AI` |
 
 ---
 

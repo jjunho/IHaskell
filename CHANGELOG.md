@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the Haskell-jjunho IHaskell fork are documented here.
+All notable changes to the Haskell-AI IHaskell fork are documented here.
 
 ## [Unreleased]
 
@@ -28,7 +28,7 @@ All notable changes to the Haskell-jjunho IHaskell fork are documented here.
 - `publishResult` inlined into `Display.hs`
 - STM replaces MVar for completion flag in capturedEval
 - Evaluate.hs decomposed from 1673→1221 lines
-- Kernel name: `haskell-jjunho`, display name: `Haskell-jjunho`
+- Kernel name: `haskell-ai`, display name: `Haskell-AI`
 - Cabal version: 1.16 → 3.4 (common stanzas, proper bounds)
 - cabal homepage, author, maintainer, source-repo → jjunho fork
 - README.md rewritten with badges, TOC, feature tables, protocol status

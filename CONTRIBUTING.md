@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in IHaskell (Haskell-jjunho fork)!
+Thanks for your interest in IHaskell (Haskell-AI fork)!
 
 ## How to Contribute
 

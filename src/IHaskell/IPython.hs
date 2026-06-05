@@ -71,8 +71,8 @@ defaultKernelSpecOptions = KernelSpecOptions
   , kernelSpecUseStack = False
   , kernelSpecStackFlags = []
   , kernelSpecEnvFile = Nothing
-  , kernelSpecKernelName = "haskell-jjunho"
-  , kernelSpecDisplayName = "Haskell-jjunho"
+  , kernelSpecKernelName = "haskell-ai"
+  , kernelSpecDisplayName = "Haskell-AI"
   }
 
 -- | Resolve the Jupyter binary, falling back to IPython.
