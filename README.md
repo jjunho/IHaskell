@@ -1,200 +1,243 @@
-![jupyter](https://i.imgur.com/S16l2Hw.png) ![IHaskell](https://i.imgur.com/qhXXFbA.png) [![Build Status](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml/badge.svg)](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml) [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/IHaskell/IHaskell/mybinder)
+![IHaskell](https://i.imgur.com/qhXXFbA.png)
 
-# IHaskell
+# IHaskell — Haskell-jjunho Kernel
 
 IHaskell is a kernel for the [Jupyter project](https://jupyter.org), which allows you to use Haskell inside Jupyter frontends (including the console and notebook). It currently supports GHC 8.4 through 9.14 (inclusive).
 
+This is a fork with extensive improvements — bug fixes, dependency cleanup, architecture refactoring, Jupyter protocol compliance, and SOTA Haskell practices.
 
-## Try it out
-You can now try IHaskell directly in your browser at [mybinder.org](https://mybinder.org/v2/gh/IHaskell/IHaskell/mybinder).
+## Features
 
-For a tour of some IHaskell features, check out the [demo Notebook](http://nbviewer.org/github/IHaskell/IHaskell/blob/master/notebooks/IHaskell.ipynb). More example notebooks are available on the [wiki](https://github.com/IHaskell/IHaskell/wiki).
-The [wiki](https://github.com/IHaskell/IHaskell/wiki) also has more extensive documentation of IHaskell features.
+- **Rich output**: Display HTML, SVG, PNG, JPG, GIF, LaTeX, Markdown, JavaScript, JSON, Vega/Vega-Lite, VDoms
+- **Charts & Diagrams**: Via `ihaskell-charts`, `ihaskell-diagrams`, `ihaskell-gnuplot`, `ihaskell-plot`
+- **Widgets**: Interactive Jupyter widgets via `ihaskell-widgets`
+- **Hoogle**: Online type/documentation search (`:hoogle`, `:doc`)
+- **HLint**: Integrated linting (`:lint`)
+- **Tab completion**: Identifiers, modules, file paths, GHC extensions
+- **Jupyter Protocol v5.0**: Full support for execute, complete, inspect, history, is_complete, comm, interrupt
+- **Structured logging**: Configurable log levels (`--debug`, `LogLevel`)
+
+## Kernel Identity
+
+- **Kernel name**: `haskell-jjunho`
+- **Display name**: `Haskell-jjunho`
+- **Protocol version**: 5.0
 
 ## Installation
-Install Haskell with via [ghcup](https://www.haskell.org/ghcup/install/).
 
-For MacOS you need to have [Homebrew](https://brew.sh) installed. You also need the Xcode command line tools. You can install them by running `xcode-select --install` in the terminal and following the prompts.
+### Prerequisites
 
-System pre-requisites:
-* MacOS: `brew install python3 zeromq libmagic cairo pkg-config pango`
-* Linux: `sudo apt-get install -y python3-pip git libtinfo-dev libzmq3-dev libcairo2-dev libpango1.0-dev libmagic-dev libblas-dev liblapack-dev`
-* Windows (using Clang64 MSYS2 packages): `pacman -S mingw-w64-clang-x86_64-zeromq mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-pango`
+Install Haskell via [ghcup](https://www.haskell.org/ghcup/install/).
 
-Python pre-requisites:
-* Jupyter: `pip3 install jupyter`
+System dependencies:
+| OS | Command |
+|----|---------|
+| **macOS** | `brew install python3 zeromq libmagic cairo pkg-config pango` |
+| **Linux** | `sudo apt-get install -y python3-pip git libtinfo-dev libzmq3-dev libcairo2-dev libpango1.0-dev libmagic-dev libblas-dev liblapack-dev` |
+| **Windows** (MSYS2) | `pacman -S mingw-w64-clang-x86_64-zeromq mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-pango` |
 
-### Cabal
+Python:
+```bash
+pip3 install jupyter
+```
 
-#### Building the IHaskell executable
-
-You can install the `ihaskell` executable from Hackage with
-
-* `cabal install ihaskell`
-
-or from source by cloning this repository:
-
-* `git clone https://github.com/IHaskell/IHaskell`
-* `cd IHaskell`
-* `cabal build && cabal install exe:ihaskell --overwrite-policy=always --force-reinstalls --installdir=/home/$USER/.cabal/bin/ --install-method=copy`
-
-#### Installing the IHaskell Jupyter kernel
-
-Once the `ihaskell` executable is installed, run:
-
-* `ihaskell install --ghclib=$(ghc --print-libdir) --prefix=$HOME/.local/`
-
-This creates the IHaskell Jupyter kernel. To use it, this kernel needs to
-be registered with Jupyter. If using an editor (e.g. VS Code), you can select
-this Jupyter kernel for your notebook. To register it manually with Jupyter,
-you can run:
-
-* `jupyter kernelspec install $HOME/.local/share/jupyter/kernels/haskell/`
-
-To confirm success, run `jupyter kernelspec list`; you should see a Haskell
-kernel installed. You can then manually start Jupyter with `jupyter notebook`.
-
-#### Stack
-Install `stack` via `ghcup tui`.
-
-These instructions assume you don't already have Stack or a Jupyter
-installation, please skip the relevant steps if this is not the case.
+### Cabal (recommended)
 
 ```bash
-git clone https://github.com/IHaskell/IHaskell
+git clone https://github.com/jjunho/IHaskell
 cd IHaskell
-pip3 install -r requirements.txt
-stack install --fast
-ihaskell install --stack
+cabal build
+cabal exec ihaskell install
 ```
 
-Run Jupyter.
+Then start Jupyter:
+```bash
+jupyter notebook
+# or
+jupyter-lab
+```
+
+The kernel "Haskell-jjunho" will appear in the kernel selector.
+
+### Building Display Packages (optional, for rich output)
 
 ```bash
-stack exec jupyter -- notebook
+cabal build ihaskell-blaze    # HTML rendering via Blaze
+cabal build ihaskell-diagrams # Diagrams (Cairo backend)
+cabal build ihaskell-charts   # Charts (Cairo backend)
+cabal build ihaskell-widgets  # Interactive widgets
 ```
 
-> If you have Homebrew installed to a location that `stack` does not expect (e.g. `/opt/homebrew`), you'll need to specify `--extra-include-dirs ${HOMEBREW_PREFIX}/include --extra-lib-dirs ${HOMEBREW_PREFIX}/lib` to the `stack` command.
+### Stack
 
-_Tested on macOS Sierra (10.12.6)_
+```bash
+stack install --fast
+stack exec ihaskell install --stack
+jupyter notebook
+```
 
-## Docker
+> Note: Display packages require the `stack.yaml` to list them. Prefer cabal for full display support.
 
-To quickly run a Jupyter notebook with the IHaskell kernel, try the `Dockerfile`
-in the top directory.
+### Docker
 
 ```bash
 docker build -t ihaskell:latest .
 docker run --rm -p 8888:8888 ihaskell:latest
 ```
 
-Or use the continuously updated Docker image 
-[on Docker Hub](https://hub.docker.com/r/gibiansky/ihaskell).
-
-```sh
+Or use the [Docker Hub image](https://hub.docker.com/r/gibiansky/ihaskell):
+```bash
 docker run --rm -p 8888:8888 gibiansky/ihaskell
 ```
 
-In order to mount your own local files into the Docker container
-use following command:
-
-```sh
-docker run --rm -p 8888:8888 -v "$PWD":/home/jovyan/src gibiansky/ihaskell
-```
-
-Be aware that the directory you're mounting must contain
-a `stack.yaml` file.
-A simple version would be:
-
-```yaml
-resolver: lts-16.23
-packages: []
-```
-
-It's recommended to use the same LTS version as the IHaskell image is using itself 
-(as can be seen in [its stack.yaml](./stack.yaml)).
-This guarantees that stack doesn't have to first perform 
-a lengthy installation of GHC before running your notebook.
-
-You can also use the following script to run IHaskell in Docker: https://gist.github.com/brandonchinn178/928d6137bfd17961b9584a8f96c18827
-
-## Nix
-
-If you have the `nix` package manager installed (and have
-[flakes](https://nixos.wiki/wiki/Flakes) enabled), you can create an IHaskell
-notebook environment with one command. For example:
+### Nix
 
 ```bash
-$ nix build
-<result path>
-$ <result path>/bin/jupyter notebook
+nix build
+# or with display modules:
+nix build .#ihaskell-env-display-ghc98
 ```
 
-It might take a while the first time, but subsequent builds will be much
-faster. You can use the
-[https://ihaskell.cachix.org](https://app.cachix.org/cache/ihaskell) cache for
-prebuilt artifacts.
+## Usage
 
-The IHaskell display modules are not loaded by default and have to be specified separately:
+Start Jupyter and select the "Haskell-jjunho" kernel. Enter Haskell code in cells:
+
+```haskell
+-- Simple expressions
+3 + 5
+
+-- Multi-line
+let x = 10
+    y = 20
+in x + y
+
+-- Rich display
+:extension OverloadedStrings
+import IHaskell.Display
+html "<b>Hello!</b>"
+```
+
+### Directives
+
+| Command | Description |
+|---------|-------------|
+| `:type <expr>` | Show expression type |
+| `:kind <type>` | Show kind |
+| `:info <name>` | Show identifier info |
+| `:hoogle <query>` | Search Hoogle online |
+| `:doc <ident>` | Get Hoogle documentation |
+| `:set -XFlag` | Enable GHC extension |
+| `:extension <Ext>` | Shortcut for `:set -XExt` |
+| `:option <opt>` | Set kernel option (lint/svg/pager) |
+| `:load <file>` | Load Haskell module |
+| `:module [+/-]Mod` | Import/unimport module |
+| `:reload` | Reload modules |
+| `:sprint <val>` | Print without evaluation |
+| `:! <cmd>` | Execute shell command |
+| `:?`, `:help` | Show help |
+
+### Kernel Options
+
+Set via `:option`:
+
+| Option | Description |
+|--------|-------------|
+| `lint` / `no-lint` | Enable/disable HLint |
+| `svg` / `no-svg` | Enable/disable SVG output |
+| `show-types` / `no-show-types` | Show types of bound names |
+| `pager` / `no-pager` | Use pager for `:info`/`:hoogle` |
+
+## Development
+
+### Build
 
 ```bash
-$ nix build .#ihaskell-env-display-ghc98
+cabal build           # build all
+cabal test            # run tests (99 test cases)
+cabal build ihaskell  # build executable only
 ```
 
-For more examples of using IHaskell with Nix, see https://github.com/vaibhavsagar/notebooks.
+### Test Suite
 
-# Developing
+| Module | Tests | What it covers |
+|--------|-------|----------------|
+| `Test/Parser.hs` | 44 | Code block parsing (expr, stmt, decl, import, directive, pragma) |
+| `Test/Eval.hs` | 16 | Haskell evaluation (expressions, types, kinds, directives) |
+| `Test/Completion.hs` | 12 | Tab completion (identifiers, qualified, modules, file paths) |
+| `Test/Properties.hs` | 3 × 100 | Hedgehog property tests (serialization roundtrip) |
+| `Test/Evaluate/Capture.hs` | 23 | Capture functions, readChars, polling loop |
+| `Test/Hoogle.hs` | 4 | Hoogle JSON response parsing |
 
-IHaskell is regularly updated to work with the latest version of GHC. To read how this is done, and how the development environment is set up, please see [this blog post](https://vaibhavsagar.com/blog/2021/05/02/updating-ihaskell-newer-ghc).
-
-## Nix flake
-
-There is also a Nix flake that provides a developer environment. For details on Nix flakes, please see the documentation at https://wiki.nixos.org/wiki/Flakes.
-
-After this, IHaskell can be compiled as follows:
-
-```bash
-nix develop # This opens a new shell with all dependencies installed
-cabal update # Make sure Cabal's package index is up-to-date
-cabal build # Builds IHaskell
-```
-
-Note that this shell also provides `haskell-language-server`, which can be used in your editor if it supports it. Opening your editor from within the `nix develop` shell should allow it to see `haskell-language-server`.
-
-# Troubleshooting
-
-## Where are my packages? (IHaskell + Stack)
-
-Stack manages separate environments for every package. By default your notebooks
-will only have access to a few packages that happen to be required for
-IHaskell. To make packages available add them to the stack.yaml in the IHaskell
-directory and run `stack install --fast`.
-
-Packages should be added to the `packages:` section and can take the following
-form
-([reproduced here from the stack documentation](https://github.com/commercialhaskell/stack/blob/master/doc/yaml_configuration.md#packages)). If
-you've already installed a package by `stack install` you can simply list its
-name even if it's local.
+### Project Structure
 
 ```
-- package-name
-- location: .
-- location: dir1/dir2
-- location: https://example.com/foo/bar/baz-0.0.2.tar.gz
-- location: http://github.com/yesodweb/wai/archive/2f8a8e1b771829f4a8a77c0111352ce45a14c30f.zip
-- location:
-    git: git@github.com:commercialhaskell/stack.git
-    commit: 6a86ee32e5b869a877151f74064572225e1a0398
-- location:
-    hg: https://example.com/hg/repo
-    commit: da39a3ee5e6b4b0d3255bfef95601890afd80709
+src/IHaskell/
+├── Display.hs               — Display constructors + publishResult
+├── Types.hs                 — Core types (KernelState, Display, Widget, LogLevel)
+├── IPython.hs               — Kernel spec installation
+├── Flags.hs                 — CLI argument parsing
+├── Eval/
+│   ├── Evaluate.hs          — Main evaluation orchestrator
+│   ├── Evaluate/
+│   │   ├── Compat.hs        — GHC API compatibility shims
+│   │   ├── Capture.hs       — Pure capture functions (readChars, pollingLoop)
+│   │   ├── Commands.hs      — Command evaluation helpers
+│   │   ├── Format.hs        — Display formatting
+│   │   └── HTML.hs          — HTML syntax highlighting
+│   ├── Parser.hs            — Code block parsing
+│   ├── Completion.hs        — Tab completion
+│   ├── Util.hs              — GHC utilities
+│   ├── Util/Ppr.hs          — Pretty-printing (pprDynFlags, pprLanguages, doc)
+│   └── Widgets.hs           — Widget message handling
+├── Publish.hs               — (removed, inlined into Display.hs)
+└── ...
 ```
 
-## The kernel keeps dying (IHaskell + Stack)
+### Jupyter Protocol Status
 
-The default instructions globally install IHaskell with support for only one
-version of GHC. If you've e.g. installed an `lts-10` IHaskell and are using it
-with an `lts-9` project the mismatch between GHC 8.2 and GHC 8.0 will cause
-this error. Stack also has the notion of a 'global project' located at
-`~/.stack/global-project/` and the `stack.yaml` for that project should be on
-the same LTS as the version of IHaskell installed to avoid this issue.
+| Message | Status |
+|---------|--------|
+| `kernel_info_request` | ✅ Complete |
+| `execute_request` | ✅ Complete |
+| `complete_request` | ✅ Complete |
+| `inspect_request` | ✅ Complete |
+| `is_complete_request` | ✅ GHC parser-based |
+| `history_request` | ✅ In-memory (500 entries) |
+| `comm_info_request` | ✅ Complete |
+| `comm_open/msg/close` | ✅ Complete |
+| `shutdown_request` | ✅ Complete |
+| `interrupt_request` | ✅ Via SIGINT |
+| `debug_request` | ❌ Not implemented |
+
+## Improvements Over Upstream
+
+### Bug Fixes
+- **MVar deadlock**: Kernel no longer deadlocks on exception during evaluation
+- **Random variable names**: Uses `Data.Unique` instead of `System.Random` (StdGen never advanced)
+- **`error` calls**: 9 crash-causing `error` calls replaced with `Either`/`displayError`
+- **`ghc-parser` types**: Qualified imports prevent name collisions
+
+### Dependencies Removed
+- `shelly` — replaced with `System.Directory`/`System.Process`
+- `random` — replaced with `Data.Unique`
+- `strict` — was unused except as re-export
+- `setenv` — already in `base`
+
+### Architecture
+- **Evaluate.hs** decomposed into Compat, Capture, Format, Commands modules
+- **Global channels** (`displayChan`, `widgetMessages`) replaced with `IORef` pattern
+- **capturedEval** refactored into testable pure functions + polling loop
+- **`Util.hs`** pretty-printing extracted into `Util/Ppr.hs`
+- **`Publish.hs`** inlined into `Display.hs`
+- **STM** replaces MVar for completion flag in IO capture
+- **Structured logging** with `LogLevel` (Error/Warn/Info/Debug)
+- **Cabal 3.4** with common stanzas
+
+### Testing
+- 99 test cases (up from 76)
+- New property tests: Display serialization roundtrip, idempotence, plain text
+- New tests for capture functions: `generateInitStmts`, `generatePostStmts`, `readChars`, `pollingLoop`
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
