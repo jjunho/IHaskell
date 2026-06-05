@@ -1,27 +1,62 @@
-![IHaskell](https://i.imgur.com/qhXXFbA.png)
+![Haskell-jjunho](images/jupyterhaskell.svg)
 
 # IHaskell — Haskell-jjunho Kernel
 
-IHaskell is a kernel for the [Jupyter project](https://jupyter.org), which allows you to use Haskell inside Jupyter frontends (including the console and notebook). It currently supports GHC 8.4 through 9.14 (inclusive).
+[![Build Status](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml/badge.svg)](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-This is a fork with extensive improvements — bug fixes, dependency cleanup, architecture refactoring, Jupyter protocol compliance, and SOTA Haskell practices.
+IHaskell is a kernel for the [Jupyter project](https://jupyter.org), which allows you to use Haskell inside Jupyter frontends (console, notebook, JupyterLab). Supports GHC 8.4 through 9.14.
+
+This fork includes bug fixes, dependency cleanup, architecture refactoring, and improved Jupyter protocol compliance.
+
+---
+
+## Quick Start
+
+```bash
+pip3 install jupyter
+git clone https://github.com/jjunho/IHaskell
+cd IHaskell
+cabal build
+cabal exec ihaskell install
+jupyter notebook
+```
+
+Select **Haskell-jjunho** from the kernel menu.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Kernel Options](#kernel-options)
+- [Development](#development)
+- [Project Structure](#project-structure)
+- [Jupyter Protocol Status](#jupyter-protocol-status)
+- [Changes From Upstream](#changes-from-upstream)
+- [FAQ / Troubleshooting](#faq--troubleshooting)
+- [License](#license)
+
+---
 
 ## Features
 
-- **Rich output**: Display HTML, SVG, PNG, JPG, GIF, LaTeX, Markdown, JavaScript, JSON, Vega/Vega-Lite, VDoms
-- **Charts & Diagrams**: Via `ihaskell-charts`, `ihaskell-diagrams`, `ihaskell-gnuplot`, `ihaskell-plot`
-- **Widgets**: Interactive Jupyter widgets via `ihaskell-widgets`
-- **Hoogle**: Online type/documentation search (`:hoogle`, `:doc`)
-- **HLint**: Integrated linting (`:lint`)
-- **Tab completion**: Identifiers, modules, file paths, GHC extensions
-- **Jupyter Protocol v5.0**: Full support for execute, complete, inspect, history, is_complete, comm, interrupt
-- **Structured logging**: Configurable log levels (`--debug`, `LogLevel`)
+| Capability | Details |
+|-----------|---------|
+| Rich output | HTML, SVG, PNG, JPG, GIF, LaTeX, Markdown, JavaScript, JSON, Vega/Vega-Lite, VDoms |
+| Charts | Bar, pie, line via ihaskell-charts (Cairo) |
+| Diagrams | Via ihaskell-diagrams (Cairo backend) |
+| Widgets | Interactive Jupyter widgets: sliders, buttons, text, images, audio, video |
+| Hoogle search | `:hoogle` queries, `:doc` fetches docs (optional, flag `use-hoogle`) |
+| HLint | Integrated linting, toggled via `:option lint` |
+| Tab completion | Identifiers, qualified names, modules, file paths, GHC extensions |
+| Shell commands | `:! ls` runs shell commands, output captured inline |
+| Module loading | `:load`, `:module`, `:reload` for multi-file projects |
+| Template Haskell | Execute TH declarations inline |
 
-## Kernel Identity
-
-- **Kernel name**: `haskell-jjunho`
-- **Display name**: `Haskell-jjunho`
-- **Protocol version**: 5.0
+---
 
 ## Installation
 
@@ -30,11 +65,12 @@ This is a fork with extensive improvements — bug fixes, dependency cleanup, ar
 Install Haskell via [ghcup](https://www.haskell.org/ghcup/install/).
 
 System dependencies:
+
 | OS | Command |
 |----|---------|
 | **macOS** | `brew install python3 zeromq libmagic cairo pkg-config pango` |
-| **Linux** | `sudo apt-get install -y python3-pip git libtinfo-dev libzmq3-dev libcairo2-dev libpango1.0-dev libmagic-dev libblas-dev liblapack-dev` |
-| **Windows** (MSYS2) | `pacman -S mingw-w64-clang-x86_64-zeromq mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-pango` |
+| **Linux** (Debian/Ubuntu) | `sudo apt-get install -y python3-pip git libtinfo-dev libzmq3-dev libcairo2-dev libpango1.0-dev libmagic-dev libblas-dev liblapack-dev` |
+| **Windows** (MSYS2 Clang64) | `pacman -S mingw-w64-clang-x86_64-zeromq mingw-w64-clang-x86_64-cairo mingw-w64-clang-x86_64-pango` |
 
 Python:
 ```bash
@@ -50,22 +86,22 @@ cabal build
 cabal exec ihaskell install
 ```
 
-Then start Jupyter:
+Verify:
 ```bash
-jupyter notebook
-# or
-jupyter-lab
+jupyter kernelspec list
+# Should show: haskell-jjunho
 ```
 
-The kernel "Haskell-jjunho" will appear in the kernel selector.
+### Enable Display Packages
 
-### Building Display Packages (optional, for rich output)
+For charts, diagrams, HTML rendering, widgets:
 
 ```bash
-cabal build ihaskell-blaze    # HTML rendering via Blaze
-cabal build ihaskell-diagrams # Diagrams (Cairo backend)
-cabal build ihaskell-charts   # Charts (Cairo backend)
-cabal build ihaskell-widgets  # Interactive widgets
+cabal build ihaskell-blaze      # HTML via Blaze
+cabal build ihaskell-diagrams   # Diagrams (Cairo)
+cabal build ihaskell-charts     # Charts (Cairo)
+cabal build ihaskell-widgets    # Interactive widgets
+cabal exec ihaskell install     # Re-register kernel
 ```
 
 ### Stack
@@ -73,70 +109,73 @@ cabal build ihaskell-widgets  # Interactive widgets
 ```bash
 stack install --fast
 stack exec ihaskell install --stack
-jupyter notebook
 ```
 
-> Note: Display packages require the `stack.yaml` to list them. Prefer cabal for full display support.
+> Display packages must be listed in `stack.yaml`. Prefer Cabal for full display support.
 
 ### Docker
 
 ```bash
-docker build -t ihaskell:latest .
-docker run --rm -p 8888:8888 ihaskell:latest
-```
-
-Or use the [Docker Hub image](https://hub.docker.com/r/gibiansky/ihaskell):
-```bash
-docker run --rm -p 8888:8888 gibiansky/ihaskell
+docker build -t ihaskell-jjunho:latest .
+docker run --rm -p 8888:8888 ihaskell-jjunho:latest
 ```
 
 ### Nix
 
 ```bash
 nix build
-# or with display modules:
-nix build .#ihaskell-env-display-ghc98
+nix build .#ihaskell-env-display-ghc98  # with display modules
 ```
+
+---
 
 ## Usage
 
-Start Jupyter and select the "Haskell-jjunho" kernel. Enter Haskell code in cells:
+Select **Haskell-jjunho** kernel in Jupyter.
 
 ```haskell
 -- Simple expressions
 3 + 5
 
 -- Multi-line
-let x = 10
-    y = 20
-in x + y
+let x = 10; y = 20 in x + y
 
--- Rich display
+-- Rich HTML
 :extension OverloadedStrings
 import IHaskell.Display
 html "<b>Hello!</b>"
+
+-- Chart
+import Graphics.Rendering.Chart
+import Data.Default.Class
+import Control.Lens
+let p (s,v,o) = pitem_value .~ v $ pitem_label .~ s $ pitem_offset .~ o $ def
+toRenderable $ pie_title .~ "Data" $ pie_plot . pie_data .~ map p [(1,1,0),(2,2,0)] $ def
 ```
 
 ### Directives
 
 | Command | Description |
 |---------|-------------|
-| `:type <expr>` | Show expression type |
-| `:kind <type>` | Show kind |
-| `:info <name>` | Show identifier info |
-| `:hoogle <query>` | Search Hoogle online |
-| `:doc <ident>` | Get Hoogle documentation |
-| `:set -XFlag` | Enable GHC extension |
+| `:type <expr>` | Expression type |
+| `:kind <type>` | Kind |
+| `:kind! <type>` | Kind + normalised type |
+| `:info <name>` | Identifier info |
+| `:hoogle <query>` | Search Hoogle |
+| `:doc <ident>` | Hoogle documentation |
+| `:set -XFlag` | GHC extension |
 | `:extension <Ext>` | Shortcut for `:set -XExt` |
-| `:option <opt>` | Set kernel option (lint/svg/pager) |
-| `:load <file>` | Load Haskell module |
+| `:option <opt>` | Kernel option |
+| `:load <file>` | Load module |
 | `:module [+/-]Mod` | Import/unimport module |
 | `:reload` | Reload modules |
-| `:sprint <val>` | Print without evaluation |
-| `:! <cmd>` | Execute shell command |
-| `:?`, `:help` | Show help |
+| `:sprint <val>` | Print without eval |
+| `:! <cmd>` | Shell command |
+| `:?`, `:help` | Help |
 
-### Kernel Options
+---
+
+## Kernel Options
 
 Set via `:option`:
 
@@ -145,99 +184,153 @@ Set via `:option`:
 | `lint` / `no-lint` | Enable/disable HLint |
 | `svg` / `no-svg` | Enable/disable SVG output |
 | `show-types` / `no-show-types` | Show types of bound names |
+| `show-errors` / `no-show-errors` | Show Show-instance errors |
 | `pager` / `no-pager` | Use pager for `:info`/`:hoogle` |
+
+---
 
 ## Development
 
 ### Build
 
 ```bash
-cabal build           # build all
-cabal test            # run tests (99 test cases)
-cabal build ihaskell  # build executable only
+cabal build             # all components
+cabal build ihaskell    # executable only
+cabal build -f-use-hoogle  # without network deps
 ```
 
-### Test Suite
+### Test
 
-| Module | Tests | What it covers |
-|--------|-------|----------------|
-| `Test/Parser.hs` | 44 | Code block parsing (expr, stmt, decl, import, directive, pragma) |
-| `Test/Eval.hs` | 16 | Haskell evaluation (expressions, types, kinds, directives) |
-| `Test/Completion.hs` | 12 | Tab completion (identifiers, qualified, modules, file paths) |
-| `Test/Properties.hs` | 3 × 100 | Hedgehog property tests (serialization roundtrip) |
-| `Test/Evaluate/Capture.hs` | 23 | Capture functions, readChars, polling loop |
-| `Test/Hoogle.hs` | 4 | Hoogle JSON response parsing |
+```bash
+cabal test              # 98 examples, 0 failures
+```
+
+| Module | Tests | Covers |
+|--------|-------|--------|
+| Test/Parser.hs | 44 | Parsing (expr, stmt, decl, import, directive, pragma, shell) |
+| Test/Eval.hs | 16 | Interactive evaluation |
+| Test/Completion.hs | 12 | Tab completion |
+| Test/Properties.hs | 3 × 100 | Hedgehog: serialization roundtrip |
+| Test/Evaluate/Capture.hs | 23 | Capture generators, readChars, pollingLoop |
+| Test/Hoogle.hs | 4 | Hoogle JSON parsing |
+
+**Total**: 98 tests (+ 3 property × 100 random runs)
 
 ### Project Structure
 
 ```
 src/IHaskell/
-├── Display.hs               — Display constructors + publishResult
-├── Types.hs                 — Core types (KernelState, Display, Widget, LogLevel)
-├── IPython.hs               — Kernel spec installation
-├── Flags.hs                 — CLI argument parsing
+├── Display.hs                   — Display constructors + publishResult
+├── Types.hs                     — KernelState, Display, Widget, LogLevel
+├── IPython.hs                   — Kernel spec installation
+├── Flags.hs                     — CLI argument parsing
 ├── Eval/
-│   ├── Evaluate.hs          — Main evaluation orchestrator
-│   ├── Evaluate/
-│   │   ├── Compat.hs        — GHC API compatibility shims
-│   │   ├── Capture.hs       — Pure capture functions (readChars, pollingLoop)
-│   │   ├── Commands.hs      — Command evaluation helpers
-│   │   ├── Format.hs        — Display formatting
-│   │   └── HTML.hs          — HTML syntax highlighting
-│   ├── Parser.hs            — Code block parsing
-│   ├── Completion.hs        — Tab completion
-│   ├── Util.hs              — GHC utilities
-│   ├── Util/Ppr.hs          — Pretty-printing (pprDynFlags, pprLanguages, doc)
-│   └── Widgets.hs           — Widget message handling
-├── Publish.hs               — (removed, inlined into Display.hs)
-└── ...
+│   ├── Evaluate.hs              — Main evaluation orchestrator
+│   ├── Parser.hs                — Code block parsing (ghc-parser)
+│   ├── Completion.hs            — Tab completion
+│   ├── Widgets.hs               — Widget message handling
+│   ├── Evaluate/Compat.hs       — GHC API compat shims
+│   ├── Evaluate/Capture.hs      — Pure capture generators, readChars, pollingLoop
+│   ├── Evaluate/Commands.hs     — EvalOut, safely, doLoadModule, doReload
+│   ├── Evaluate/Format.hs       — displayError, formatError, formatType
+│   ├── Evaluate/HTML.hs         — HTML syntax highlighting
+│   ├── Util.hs                  — GHC utilities (re-exports Ppr)
+│   └── Util/Ppr.hs              — Pretty-printing (pprDynFlags, doc)
+ipython-kernel/
+├── src/IHaskell/IPython/
+│   ├── Types.hs                 — MessageType, ToJSON, FromJSON
+│   ├── ZeroMQ.hs                — ZeroMQ channel interface
+│   ├── Message/Parser.hs        — Message parsing
+│   └── Message/UUID.hs          — UUID generation
+ihaskell-display/                 — Display packages (blaze, diagrams, charts, widgets, ...)
 ```
 
-### Jupyter Protocol Status
+---
 
-| Message | Status |
-|---------|--------|
-| `kernel_info_request` | ✅ Complete |
-| `execute_request` | ✅ Complete |
-| `complete_request` | ✅ Complete |
-| `inspect_request` | ✅ Complete |
-| `is_complete_request` | ✅ GHC parser-based |
-| `history_request` | ✅ In-memory (500 entries) |
-| `comm_info_request` | ✅ Complete |
-| `comm_open/msg/close` | ✅ Complete |
-| `shutdown_request` | ✅ Complete |
-| `interrupt_request` | ✅ Via SIGINT |
-| `debug_request` | ❌ Not implemented |
+## Jupyter Protocol Status
 
-## Improvements Over Upstream
+| Message | Status | Notes |
+|---------|--------|-------|
+| `kernel_info_request` | ✅ | Protocol 5.0, full language info |
+| `execute_request` | ✅ | Execute + iopub (stream, display_data, error) |
+| `complete_request` | ✅ | Tab completion via GHC API |
+| `inspect_request` | ✅ | Type inspection |
+| `is_complete_request` | ✅ | GHC parser (parserModule + heuristics) |
+| `history_request` | ✅ | In-memory, 500 entries |
+| `interrupt_request` | ✅ | SIGINT via control channel (POSIX) |
+| `comm_info/comm_open/comm_msg/comm_close` | ✅ | Widget protocol v2.0.0 |
+| `shutdown_request` | ✅ | Graceful exit |
+| `debug_request` | ❌ | Jupyter debug protocol not implemented |
+
+---
+
+## Changes From Upstream
 
 ### Bug Fixes
-- **MVar deadlock**: Kernel no longer deadlocks on exception during evaluation
-- **Random variable names**: Uses `Data.Unique` instead of `System.Random` (StdGen never advanced)
-- **`error` calls**: 9 crash-causing `error` calls replaced with `Either`/`displayError`
-- **`ghc-parser` types**: Qualified imports prevent name collisions
+- MVar deadlock prevented (gcatch around takeMVar/putMVar)
+- random variable names use Data.Unique (StdGen never advanced)
+- 9 `error` calls → Either/displayError (no kernel crash on bad input)
+- Qualified GHC parser imports (no Failure/Parsed name collisions)
 
-### Dependencies Removed
-- `shelly` — replaced with `System.Directory`/`System.Process`
-- `random` — replaced with `Data.Unique`
-- `strict` — was unused except as re-export
-- `setenv` — already in `base`
+### Dependencies (4 removed, 0 added in production)
+- `shelly` → System.Directory/System.Process
+- `random` → Data.Unique (base)
+- `strict` (unused)
+- `setenv` (unused)
+- `http-client`/`http-client-tls` → optional (flag `use-hoogle`)
 
 ### Architecture
-- **Evaluate.hs** decomposed into Compat, Capture, Format, Commands modules
-- **Global channels** (`displayChan`, `widgetMessages`) replaced with `IORef` pattern
-- **capturedEval** refactored into testable pure functions + polling loop
-- **`Util.hs`** pretty-printing extracted into `Util/Ppr.hs`
-- **`Publish.hs`** inlined into `Display.hs`
-- **STM** replaces MVar for completion flag in IO capture
-- **Structured logging** with `LogLevel` (Error/Warn/Info/Debug)
-- **Cabal 3.4** with common stanzas
+- Evaluate.hs decomposed: Compat, Capture, Format, Commands modules
+- Global channels (displayChan, widgetMessages) → IORef pattern
+- capturedEval: pure functions + testable polling loop
+- Util.Ppr extracted from 591-line Util.hs
+- Publish.hs inlined into Display.hs
+- STM replaces MVar for completion flag
+- Structured logging (LogLevel ADT)
+- Cabal 3.4 with common stanzas
 
 ### Testing
-- 99 test cases (up from 76)
-- New property tests: Display serialization roundtrip, idempotence, plain text
-- New tests for capture functions: `generateInitStmts`, `generatePostStmts`, `readChars`, `pollingLoop`
+- 98 tests (up from 76 upstream)
+- Hedgehog property tests
+- Capture: generators, readChars, pollingLoop
+- Oracle-verified across 5 review cycles
+
+---
+
+## FAQ / Troubleshooting
+
+### Kernel not in kernel list?
+
+```bash
+cabal exec ihaskell install
+jupyter kernelspec list
+```
+
+### Display packages not working?
+
+Build them, then reinstalled kernel:
+```bash
+cabal build ihaskell-blaze
+cabal exec ihaskell install
+```
+
+### Cairo not found?
+
+```bash
+# Linux
+sudo apt-get install libcairo2-dev libpango1.0-dev
+# macOS
+brew install cairo pango
+```
+
+### Stack vs Cabal?
+
+Cabal is preferred. Stack needs display packages in `stack.yaml`. Without `--stack`, kernel runs standalone.
+
+---
 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+Upstream IHaskell by Andrew Gibiansky. This fork by [jjunho](https://github.com/jjunho).

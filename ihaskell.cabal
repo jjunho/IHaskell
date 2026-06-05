@@ -11,7 +11,7 @@ description:         IHaskell is a Haskell backend kernel for the Jupyter projec
                      a console or notebook interface. Additional packages may be installed to provide richer data visualizations.
 
 -- URL for the project homepage or repository.
-homepage:            http://github.com/gibiansky/IHaskell
+homepage:            https://github.com/jjunho/IHaskell
 
 -- The license under which the package is released.
 license:             MIT
@@ -20,11 +20,11 @@ license:             MIT
 license-file:        LICENSE
 
 -- The package author(s).
-author:              Andrew Gibiansky
+author:              jjunho
 
 -- An email address to which users can send suggestions, bug reports, and
 -- patches.
-maintainer:          andrew.gibiansky@gmail.com
+maintainer:          https://github.com/jjunho
 
 -- A copyright notice.
 -- copyright:
@@ -178,6 +178,8 @@ Test-Suite hspec
     Type:             exitcode-stdio-1.0
     Main-Is:          Hspec.hs
     hs-source-dirs:   src/tests
+  if flag(use-hoogle)
+    cpp-options: -DUSE_HOOGLE
     other-modules:
         IHaskell.Test.Eval
         IHaskell.Test.Completion
@@ -208,4 +210,4 @@ Test-Suite hspec
 
 source-repository head
   type:     git
-  location: https://github.com/gibiansky/IHaskell.git
+  location: https://github.com/jjunho/IHaskell.git
