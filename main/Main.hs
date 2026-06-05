@@ -297,9 +297,9 @@ looksIncomplete :: String -> Bool
 looksIncomplete code =
   let trimmed = reverse $ dropWhile (`elem` " \t\n") code
   in any (`isPrefixOf` trimmed) (reverse <$> incompleteTriggers)
-     || unmatched "(" trimmed
-     || unmatched "[" trimmed
-     || unmatched "{" trimmed
+      || unmatched '(' trimmed
+      || unmatched '[' trimmed
+      || unmatched '{' trimmed
   where
     incompleteTriggers = ["do", "where", "of", "let", "if", "then", "else", "::", "->", "=", "\\", "{-#"]
     unmatched c s = countChar c s > countChar (close c) s

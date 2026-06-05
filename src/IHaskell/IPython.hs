@@ -72,7 +72,7 @@ defaultKernelSpecOptions = KernelSpecOptions
   , kernelSpecStackFlags = []
   , kernelSpecEnvFile = Nothing
   , kernelSpecKernelName = "haskell"
-  , kernelSpecDisplayName = "Haskell"
+  , kernelSpecDisplayName = "IHaskell-jjunho"
   }
 
 -- | Resolve the Jupyter binary, falling back to IPython.
