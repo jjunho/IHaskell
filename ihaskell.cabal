@@ -178,8 +178,8 @@ Test-Suite hspec
     Type:             exitcode-stdio-1.0
     Main-Is:          Hspec.hs
     hs-source-dirs:   src/tests
-  if flag(use-hoogle)
-    cpp-options: -DUSE_HOOGLE
+    if flag(use-hoogle)
+      cpp-options: -DUSE_HOOGLE
     other-modules:
         IHaskell.Test.Eval
         IHaskell.Test.Completion
