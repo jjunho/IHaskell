@@ -3,7 +3,7 @@
 **Branch**: `review/verification`  
 **Base**: `master` (7d765e9 — Nixpkgs 26.05)  
 **Total**: 29 files changed, +1,784 / -1,220 lines  
-**Tests**: 102 test cases across 7 modules, all pass (3 Hedgehog properties run 100× each)  
+**Tests**: 102 test cases across 6 modules, all pass (3 Hedgehog properties run 100× each)  
 **Build**: `cabal build` clean, `cabal test` passes
 
 ---

@@ -2,7 +2,7 @@
 
 # IHaskell — Haskell-jjunho Kernel
 
-[![Build Status](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml/badge.svg)](https://github.com/IHaskell/IHaskell/actions/workflows/stack.yml)
+[![Build Status](https://github.com/jjunho/IHaskell/actions/workflows/stack.yml/badge.svg)](https://github.com/jjunho/IHaskell/actions/workflows/stack.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 IHaskell is a kernel for the [Jupyter project](https://jupyter.org), which allows you to use Haskell inside Jupyter frontends (console, notebook, JupyterLab). Supports GHC 8.4 through 9.14.
@@ -313,7 +313,7 @@ jupyter kernelspec list
 
 ### Display packages not working?
 
-Build them, then reinstalled kernel:
+Build display packages, then reinstall the kernel:
 ```bash
 cabal build ihaskell-blaze
 cabal exec ihaskell install
