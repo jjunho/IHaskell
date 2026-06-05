@@ -23,7 +23,7 @@ import           Data.Aeson
 import           Data.ByteString.Base64 as B64 (decodeLenient)
 import qualified Data.Map as Map
 import           Data.Text.Encoding (encodeUtf8)
-import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
+import           Data.IORef (atomicWriteIORef)
 
 import           Data.Foldable (foldl)
 import           System.IO.Unsafe (unsafePerformIO)

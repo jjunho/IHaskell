@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude, CPP #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 -- | GHC API compatibility shims.  All CPP-gated version adaptations are
 -- collected here so that the rest of the codebase can import a stable

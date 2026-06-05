@@ -73,7 +73,7 @@ import qualified Data.ByteString.Base64 as Base64
 
 import           Control.Concurrent.STM (atomically)
 import           Control.Concurrent.STM.TChan
-import           Data.IORef (IORef, newIORef, readIORef, atomicWriteIORef)
+import           Data.IORef (atomicWriteIORef)
 import           System.IO.Unsafe (unsafePerformIO)
 import qualified Data.Time as Time
 

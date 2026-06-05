@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude, DoAndIfThenElse, OverloadedStrings, ExtendedDefaultRules #-}
 {-# LANGUAGE CPP, ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 -- | Description : Argument parsing and basic messaging loop, using Haskell
 --                 Chans to communicate with the ZeroMQ sockets.
@@ -15,7 +16,7 @@ import           Control.Arrow (second)
 import           Data.Aeson hiding (Success)
 import           System.Process (readProcess, readProcessWithExitCode)
 import           System.Exit (exitSuccess, ExitCode)
-import           Control.Exception (try, SomeException)
+import           Control.Exception (try)
 import           System.Environment (getArgs)
 import           System.Environment (setEnv)
 #ifdef mingw32_HOST_OS
@@ -28,16 +29,16 @@ import           GHC (getSessionDynFlags)
 import qualified Language.Haskell.GHC.Parser as GHC_Parser
 
 import qualified Data.Map as Map
-import           Data.List (break, last)
+import           Data.List (break)
 import           Data.Version (showVersion)
 
 -- IHaskell imports.
 import           IHaskell.Convert (convert)
 import           IHaskell.Eval.Completion (complete)
 import           IHaskell.Eval.Inspect (inspect)
-import           IHaskell.Eval.Evaluate (interpret, testInterpret, testEvaluate,
-                   evaluate, flushWidgetMessages, Interpreter, liftIO,
-                   typeCleaner, formatType, capturedIO, gcatch, throw)
+import           IHaskell.Eval.Evaluate (interpret,
+                   evaluate, flushWidgetMessages, Interpreter,
+                   capturedIO, gcatch, throw)
 import           IHaskell.Display
 import           IHaskell.Eval.Widgets (widgetHandler)
 import           IHaskell.Flags
@@ -295,7 +296,7 @@ createReplyHeader parent = do
 -- Returns 'True' for trailing keywords, open braces/brackets, etc.
 looksIncomplete :: String -> Bool
 looksIncomplete code =
-  let trimmed = reverse $ dropWhile (`elem` " \t\n") code
+  let trimmed = reverse $ dropWhile (\c -> c `elem` (" \t\n" :: String)) code
   in any (`isPrefixOf` trimmed) (reverse <$> incompleteTriggers)
       || unmatched '(' trimmed
       || unmatched '[' trimmed

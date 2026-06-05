@@ -16,10 +16,10 @@ module IHaskell.Eval.Evaluate.Capture (
 
 import           IHaskellPrelude
 
-import           System.IO (Handle, hGetChar)
-import           Control.Exception (try, SomeException)
-import           Control.Concurrent (threadDelay, forkIO)
-import           Control.Concurrent.STM (TVar, readTVarIO, atomically, writeTVar)
+import           System.IO (hGetChar)
+import           Control.Exception (try)
+import           Control.Concurrent (threadDelay)
+import           Control.Concurrent.STM (TVar, readTVarIO)
 
 -- | Generate a unique variable name by appending a suffix.
 generateVarName :: String -> String -> String

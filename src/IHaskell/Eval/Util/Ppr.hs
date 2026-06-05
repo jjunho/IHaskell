@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, NoImplicitPrelude #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 -- | Pretty-printing utilities for GHC 'SDoc' values: flags, languages, and
 -- general rendering.  Extracted from 'IHaskell.Eval.Util' to reduce the CPP
@@ -123,7 +124,9 @@ pprLanguages show_all dflags =
         Just Haskell2010 -> O.text "Haskell2010"
 #if MIN_VERSION_ghc(9,4,0)
         Just GHC2021 -> O.text "GHC2021"
-#else
+#endif
+#if MIN_VERSION_ghc(9,12,0)
+        Just GHC2024 -> O.text "GHC2024"
 #endif
     , (if show_all
          then O.text "all active language options:"

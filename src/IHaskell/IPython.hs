@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude, DoAndIfThenElse, OverloadedStrings, ExtendedDefaultRules #-}
+{-# OPTIONS_GHC -Wno-name-shadowing #-}
 
 -- | Description : Shell scripting wrapper for the @notebook@ and @console@
 --                 commands.  Uses standard @base@ libraries (@System.Directory@,
@@ -22,10 +23,8 @@ import qualified System.IO as IO
 import qualified System.FilePath as FP
 import           System.Directory
 import           System.Environment (getExecutablePath, lookupEnv)
-import           System.Directory (findExecutable)
 import           System.Exit (exitFailure, ExitCode(..))
 import           System.Process (readProcess, readProcessWithExitCode)
-import           System.IO (hPutStrLn)
 import           Data.Aeson (toJSON)
 import           Data.Aeson.Text (encodeToTextBuilder)
 import           Data.Text.Lazy.Builder (toLazyText)
@@ -37,7 +36,6 @@ import qualified GHC.Paths
 import           IHaskell.Types
 
 import           Control.Exception (bracket)
-import           System.Directory (getTemporaryDirectory)
 import           StringUtils (replace, split)
 
 data KernelSpecOptions =

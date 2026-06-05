@@ -1,4 +1,5 @@
 {-# LANGUAGE NoOverloadedStrings, NoImplicitPrelude, TypeSynonymInstances, GADTs, CPP #-}
+{-# OPTIONS_GHC -Wno-unused-imports -Wno-unused-local-binds #-}
 
 {- | Description : Wrapper around GHC API, exposing a single `evaluate` interface that runs
                    a statement, declaration, import, or directive.

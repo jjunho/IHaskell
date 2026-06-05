@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude, CPP #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 module IHaskell.Eval.Util (
     -- * Initialization

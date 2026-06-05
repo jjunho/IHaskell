@@ -18,7 +18,6 @@ import           IHaskellPrelude
 import           IHaskell.Eval.Evaluate.Compat (typeCleaner)
 import           IHaskell.CSS (ihaskellCSS)
 import           IHaskell.Display
-import           IHaskell.Types (Display(..), DisplayData(..), MimeType(..))
 import           IHaskell.Eval.Parser (ErrMsg, StringLoc(..))
 import           StringUtils (replace, rstrip)
 

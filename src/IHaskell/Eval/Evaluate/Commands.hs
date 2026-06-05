@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, NoImplicitPrelude #-}
+{-# OPTIONS_GHC -Wno-unused-imports #-}
 
 -- | Helpers for command evaluation: exception-safe wrappers, module loading,
 -- module reloading, and the result type.
